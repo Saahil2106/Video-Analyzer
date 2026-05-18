@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EffectScan — Video Effect Analyzer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #111318;
+    --surface: #1c1f26;
+    --card:    #23272f;
+    --border:  #2e3340;
+    --text:    #e8eaf0;
+    --muted:   #7a8099;
+    --purple:  #7f77dd;
+    --teal:    #1d9e75;
+    --coral:   #e85d24;
+    --blue:    #3b8bd4;
+    --pink:    #d4537e;
+    --amber:   #ba7517;
+    --gray:    #888780;
+    --yellow:  #facc15;
+    --indigo:  #6366f1;
+  }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; align-items: center; height: 56px; gap: 8px; }
+  .logo { font-size: 18px; font-weight: 600; margin-right: 24px; }
+  .tab { padding: 8px 18px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--muted); border: none; background: none; transition: all .2s; }
+  .tab:hover { color: var(--text); background: var(--card); }
+  .tab.active { color: var(--text); background: var(--purple); }
+  .page { display: none; padding: 32px; max-width: 1100px; margin: 0 auto; }
+  .page.active { display: block; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+  .card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+  .dropzone { border: 2px dashed var(--border); border-radius: 10px; padding: 48px 24px; text-align: center; cursor: pointer; transition: all .2s; }
+  .dropzone:hover, .dropzone.drag { border-color: var(--purple); background: rgba(127,119,221,.06); }
+  .dropzone p { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .dropzone .icon { font-size: 36px; }
+  .btn { padding: 10px 22px; border-radius: 8px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .2s; }
+  .btn-primary { background: var(--purple); color: #fff; }
+  .btn-primary:hover { opacity: .88; }
+  .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--purple); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-teal { background: var(--teal); color: #fff; }
+  .btn-amber { background: var(--amber); color: #fff; }
+  .progress-wrap { background: var(--border); border-radius: 99px; height: 8px; overflow: hidden; margin: 12px 0; }
+  .progress-bar { height: 100%; border-radius: 99px; background: var(--purple); transition: width .3s; width: 0%; }
+  .effect-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+  .effect-name { width: 130px; font-size: 13px; color: var(--muted); flex-shrink: 0; }
+  .effect-track { flex: 1; background: var(--border); border-radius: 99px; height: 10px; overflow: hidden; }
+  .effect-fill { height: 100%; border-radius: 99px; transition: width .6s ease; }
+  .effect-pct { width: 42px; font-size: 13px; text-align: right; }
+  .timeline { position: relative; height: 48px; background: var(--surface); border-radius: 8px; overflow: hidden; margin-top: 12px; cursor: pointer; }
+  .tl-seg { position: absolute; top: 6px; height: 36px; border-radius: 6px; opacity: .85; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; overflow: hidden; white-space: nowrap; padding: 0 4px; }
+  .tl-cursor-line { position: absolute; top: 0; width: 2px; height: 100%; background: rgba(255,255,255,0.8); pointer-events: none; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; }
+  .stat-val { font-size: 22px; font-weight: 600; }
+  .stat-lbl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; }
+  .json-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: monospace; font-size: 12px; color: #a8c0d6; max-height: 320px; overflow-y: auto; white-space: pre-wrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot-green  { background: var(--teal); }
+  .dot-yellow { background: var(--amber); animation: pulse 1s infinite; }
+  .dot-gray   { background: var(--gray); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+  /* YOLO11 model selector */
+  .model-select-row { display:flex; align-items:center; gap:10px; margin:14px 0 0; flex-wrap:wrap; }
+  .model-select-label { font-size:12px; color:var(--muted); flex-shrink:0; }
+  .model-select { background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:7px 12px; font-size:13px; cursor:pointer; outline:none; transition:border-color .2s; }
+  .model-select:focus { border-color:var(--purple); }
+  .model-badge { font-size:11px; padding:2px 8px; border-radius:99px; font-weight:600; background:rgba(127,119,221,.15); color:var(--purple); border:1px solid rgba(127,119,221,.3); }
+  .model-desc { font-size:11px; color:var(--muted); margin-top:4px; }
+
+  /* Tracking target selector */
+  .track-targets-section { margin-top:14px; }
+  .track-targets-label { font-size:12px; color:var(--muted); margin-bottom:8px; display:block; }
+  .target-grid { display:flex; flex-wrap:wrap; gap:6px; }
+  .target-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:99px;
+    font-size:12px; font-weight:500; cursor:pointer; border:1px solid var(--border);
+    background:var(--surface); color:var(--muted); transition:all .18s; user-select:none; }
+  .target-chip:hover { border-color:var(--purple); color:var(--text); }
+  .target-chip.selected { background:rgba(127,119,221,.18); border-color:var(--purple); color:var(--purple); }
+  .target-chip .chip-icon { font-size:14px; line-height:1; }
+  .target-chip input[type=checkbox] { display:none; }
+  .target-select-actions { display:flex; gap:8px; margin-top:8px; }
+  .target-select-actions button { font-size:11px; padding:3px 10px; border-radius:6px;
+    border:1px solid var(--border); background:none; color:var(--muted); cursor:pointer; transition:all .15s; }
+  .target-select-actions button:hover { border-color:var(--purple); color:var(--purple); }
+  .conf-row { display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap; }
+  .conf-row label { font-size:12px; color:var(--muted); flex-shrink:0; }
+  .conf-slider { flex:1; min-width:100px; accent-color:var(--purple); cursor:pointer; }
+  .conf-val { font-size:12px; font-family:monospace; color:var(--purple); min-width:32px; }
+  .size-filter-row { display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap; }
+  .size-filter-row label { font-size:12px; color:var(--muted); }
+  .size-filter-row select { background:var(--surface); border:1px solid var(--border); color:var(--text);
+    border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer; outline:none; transition:border-color .2s; }
+  .size-filter-row select:focus { border-color:var(--purple); }
+  input[type=file] { display: none; }
+  .file-name { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .error-msg { color: #e24b4a; font-size: 13px; margin-top: 8px; min-height: 18px; }
+  .summary-box { background: var(--surface); border-left: 3px solid var(--purple); border-radius: 0 8px 8px 0; padding: 12px 16px; font-size: 14px; color: var(--muted); margin-top: 12px; }
+  .video-wrap { position: relative; width: 100%; background: #000; border-radius: 8px; overflow: hidden; line-height: 0; }
+  .video-wrap video { width: 100%; display: block; }
+  .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  .live-bar { display: flex; gap: 16px; margin-top: 10px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .merge-banner { background: rgba(29,158,117,.15); border: 1px solid var(--teal); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--teal); margin-top: 12px; display: none; }
+  .track-banner { background: rgba(186,117,23,.12); border: 1px solid var(--amber); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--amber); margin-top: 12px; }
+
+  /* Tier tabs */
+  .tier-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .tier-tab { padding: 8px 18px; font-size: 13px; font-weight: 500; color: var(--muted); border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all .15s; }
+  .tier-tab:hover { color: var(--text); }
+  .tier-tab.active { color: var(--purple); border-bottom-color: var(--purple); }
+  .tier-panel { display: none; }
+  .tier-panel.active { display: block; }
+  .tier-label { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; margin-bottom: 14px; }
+  .tier-label-basic    { background: rgba(29,158,117,.15);  color: var(--teal); }
+  .tier-label-advanced { background: rgba(127,119,221,.15); color: var(--purple); }
+  .tier-label-sensor   { background: rgba(186,117,23,.15);  color: var(--amber); }
+
+  /* NEW: skeleton overlay legend */
+  .skel-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .skel-legend span { display: flex; align-items: center; gap: 4px; }
+  .skel-sw { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+
+  /* NEW: per-frame detection panel */
+  .frame-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-top: 12px; max-height: 220px; overflow-y: auto; }
+  .frame-panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+  .frame-panel-head .fnum { font-size: 15px; font-weight: 700; color: var(--purple); font-family: monospace; }
+  .det-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+  .det-row:last-child { border-bottom: none; }
+  .det-label { font-weight: 700; min-width: 86px; }
+  .det-conf  { color: var(--muted); min-width: 34px; }
+  .det-pos   { color: var(--blue); min-width: 78px; }
+  .det-sz    { color: var(--amber); min-width: 58px; }
+  .det-dep   { color: var(--teal); }
+  .pose-badge { background: rgba(127,119,221,.2); color: var(--purple); padding: 1px 6px; border-radius: 10px; font-size: 9px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo"> EffectScan</span>
+  <button class="tab active" onclick="showTab('upload',this)">Upload</button>
+  <button class="tab" onclick="showTab('train',this)">Train</button>
+  <button class="tab" onclick="showTab('results',this)">Results</button>
+  <button class="tab" onclick="showTab('track',this)">Track</button>
+  <button class="tab" onclick="showTab('extract',this)">⚙ Extract</button>
+</nav>
+
+<!-- ═══════════ UPLOAD TAB ═══════════ -->
+<div class="page active" id="page-upload">
+  <div class="grid2">
+    <div>
+      <div class="card">
+        <h2>Upload video</h2>
+        <div class="dropzone" id="dropzone"
+             onclick="document.getElementById('fileInput').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleDrop(event)">
+          <div class="icon">🎥</div>
+          <p>Drop your video here or click to browse</p>
+          <p>Supports MP4, AVI, MOV, MKV, WEBM</p>
+        </div>
+        <input type="file" id="fileInput" accept=".mp4,.avi,.mov,.mkv,.webm" onchange="handleFile(this.files[0])">
+        <div class="file-name" id="fileName">No file selected</div>
+        <div class="error-msg" id="errorMsg"></div>
+        <br>
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeVideo()" disabled>Analyze video</button>
+      </div>
+      <br>
+      <div class="card" id="summaryCard" style="display:none">
+        <h2>Summary</h2>
+        <div class="stats">
+          <div class="stat"><div class="stat-val" id="sDuration">—</div><div class="stat-lbl">Duration (s)</div></div>
+          <div class="stat"><div class="stat-val" id="sFps">—</div><div class="stat-lbl">FPS</div></div>
+          <div class="stat"><div class="stat-val" id="sFrames">—</div><div class="stat-lbl">Frames</div></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <span style="font-size:13px;color:var(--muted)">Dominant effect:</span>
+          <span class="badge" id="sDominant" style="background:var(--purple);color:#fff">—</span>
+          <span class="badge" id="sIntensity" style="background:var(--card);border:1px solid var(--border)">—</span>
+        </div>
+        <div class="summary-box" id="sSummary"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" id="effectsCard" style="display:none">
+        <h2>Effects detected</h2>
+        <div id="effectBars"></div>
+        <br>
+        <h2>Timeline</h2>
+        <div class="timeline" id="timeline">
+          <div class="tl-cursor-line" id="tlCursor" style="left:0%;display:none"></div>
+        </div>
+        <br>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-teal" id="reportBtn" onclick="openReport()" style="display:none">📊 Full Report</button>
+          <button class="btn btn-secondary" onclick="showTab('results',document.querySelectorAll('.tab')[2])">Results tab</button>
+          <button class="btn btn-amber" id="runTrackBtn" onclick="runTrackingFromUpload()" style="display:none">🎯 Run Tracking</button>
+        </div>
+        <div class="merge-banner" id="mergeBanner">
+          ✅ Tracking data merged — skeleton and bounding box overlays are now active.
+          <a href="#" onclick="openReport();return false" style="color:var(--teal);margin-left:8px">View full report →</a>
+        </div>
+      </div>
+
+      <div class="card" id="loadingCard" style="display:none">
+        <h2>Analyzing...</h2>
+        <p style="color:var(--muted);font-size:14px">Extracting features and running cinema analysis.</p>
+        <div class="progress-wrap"><div class="progress-bar" id="analyzeProgress"></div></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" id="analyzeStatus"></div>
+      </div>
+
+      <div class="card" id="trackingInlineCard" style="display:none;margin-top:24px">
+        <h2>🎯 Subject tracking <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:4px">YOLO11</span></h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+          Running YOLO11 on every frame. Results will auto-merge into the analysis.
+        </p>
+        <div class="progress-wrap"><div class="progress-bar" id="trackInlineProgress"></div></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" id="trackInlineStatus">Starting...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIDEO PLAYER -->
+  <br>
+  <div class="card" id="playerCard" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <h2>Live playback</h2>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted)">Overlays:</span>
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="showEffects"  checked> Effects</label>
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="showBboxes"  checked> Boxes</label>
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="showLighting" checked> Lighting</label>
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="showSkeleton" checked> Skeleton</label>
+        <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="showAllObj"  checked> All objects</label>
+      </div>
+    </div>
+    <div id="videoStatusMsg" style="color:var(--muted);font-size:13px;padding:16px;display:none"></div>
+    <div class="video-wrap" id="videoWrap">
+      <video id="analysisVideo" controls preload="metadata"></video>
+      <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+    </div>
+    <div class="live-bar">
+      <span>Time: <b id="liveTime" style="color:var(--text);font-family:monospace">0.00s</b></span>
+      <span>Frame: <b id="liveFrame" style="color:var(--purple);font-family:monospace">0</b></span>
+      <span>Effect: <b id="liveEffect" style="color:var(--purple)">—</b></span>
+      <span>Light: <b id="liveLighting" style="color:var(--amber)">—</b></span>
+      <span>Shot: <b id="liveShot" style="color:var(--teal)">—</b></span>
+      <span>Subjects: <b id="liveSubjects">—</b></span>
+    </div>
+    <!-- skeleton legend (shown after tracking) -->
+    <div class="skel-legend" id="skelLegend" style="display:none">
+      <span><span class="skel-sw" style="background:#ff4444"></span>Head</span>
+      <span><span class="skel-sw" style="background:#ff9900"></span>Arms</span>
+      <span><span class="skel-sw" style="background:#44ff88"></span>Torso</span>
+      <span><span class="skel-sw" style="background:#4499ff"></span>Legs</span>
+    </div>
+    <!-- per-frame detection panel (shown after tracking) -->
+    <div class="frame-panel" id="framePanel" style="display:none">
+      <div class="frame-panel-head">
+        <span class="fnum" id="fpFrame">0</span>
+        <span id="fpTs">0.000s</span> ·
+        <span id="fpCount" style="color:var(--text)">0</span> detections
+      </div>
+      <div id="fpList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TRAIN TAB ═══════════ -->
+<div class="page" id="page-train">
+  <div class="grid2">
+    <div class="card">
+      <h2>Model training</h2>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+        <div class="dot dot-gray" id="trainDot"></div>
+        <span id="trainStatusText">Not trained</span>
+      </div>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Trains a statistical effect classifier on 3,160 UCF-101 clips.</p>
+      <div class="progress-wrap"><div class="progress-bar" id="trainProgress"></div></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="trainPct">0%</div>
+      <button class="btn btn-primary" id="trainBtn" onclick="trainModel()">Train model</button>
+    </div>
+    <div class="card" id="metricsCard" style="display:none">
+      <h2>Metrics</h2>
+      <div class="stats">
+        <div class="stat"><div class="stat-val" id="mAcc">—</div><div class="stat-lbl">Accuracy</div></div>
+        <div class="stat"><div class="stat-val">3,160</div><div class="stat-lbl">Clips</div></div>
+        <div class="stat"><div class="stat-val">7</div><div class="stat-lbl">Classes</div></div>
+      </div>
+      <h2>Per-class F1</h2>
+      <div id="f1Bars"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ RESULTS TAB ═══════════ -->
+<div class="page" id="page-results">
+  <div class="tier-tabs" id="tierTabs" style="display:none">
+    <button class="tier-tab active" onclick="showTier('basic',this)">🟢 Basic Metadata</button>
+    <button class="tier-tab"        onclick="showTier('advanced',this)">🟣 Advanced Metadata</button>
+    <button class="tier-tab"        onclick="showTier('sensor',this)">🟡 Sensor Metadata</button>
+  </div>
+
+  <div class="tier-panel active" id="tier-basic">
+    <div class="tier-label tier-label-basic">Basic Metadata</div>
+    <div class="grid2" style="margin-bottom:24px">
+      <div class="card"><h2>File info</h2><div id="basicFileInfo" style="font-size:13px"></div></div>
+      <div class="card"><h2>Effect summary</h2><div id="basicEffectBars"></div></div>
+    </div>
+    <div class="card"><h2>Last result JSON — basic_metadata</h2><div class="json-box" id="jsonPreviewBasic">No analysis run yet.</div></div>
+  </div>
+
+  <div class="tier-panel" id="tier-advanced">
+    <div class="tier-label tier-label-advanced">Advanced Metadata</div>
+    <div class="card" id="cinemaCard" style="display:none;margin-bottom:24px">
+      <h2>Cinematography analysis</h2>
+      <div class="stats" id="cinemaStats"></div>
+      <h2 style="margin-top:16px">Segment breakdown</h2>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="color:var(--muted);border-bottom:1px solid var(--border)">
+            <th style="padding:8px 6px;text-align:left">Time</th>
+            <th style="padding:8px 6px;text-align:left">Light source</th>
+            <th style="padding:8px 6px;text-align:left">Direction</th>
+            <th style="padding:8px 6px;text-align:left">Key style</th>
+            <th style="padding:8px 6px;text-align:left">Shot type</th>
+            <th style="padding:8px 6px;text-align:left">Camera</th>
+            <th style="padding:8px 6px;text-align:left">Subjects</th>
+            <th style="padding:8px 6px;text-align:left">Kelvin</th>
+          </tr></thead>
+          <tbody id="cinemaTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" id="trackSummaryCard" style="display:none;margin-bottom:24px">
+      <h2>Subject tracking summary</h2>
+      <div class="stats" id="trackSummaryStats"></div>
+      <h2 style="margin-top:16px">Labels detected</h2>
+      <div id="trackSummaryLabels" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+    </div>
+    <div class="card"><h2>Last result JSON — advanced_metadata</h2><div class="json-box" id="jsonPreviewAdvanced">No analysis run yet.</div></div>
+  </div>
+
+  <div class="tier-panel" id="tier-sensor">
+    <div class="tier-label tier-label-sensor">Sensor Metadata</div>
+    <div class="grid2" style="margin-bottom:24px">
+      <div class="card"><h2>Feature breakdown</h2><div id="featureTable" style="font-size:13px"></div></div>
+      <div class="card"><h2>Per-segment optical flow</h2><div id="segFlowTable" style="font-size:13px"></div></div>
+    </div>
+    <div class="card"><h2>Last result JSON — sensor_metadata</h2><div class="json-box" id="jsonPreviewSensor">No analysis run yet.</div></div>
+  </div>
+</div>
+
+<!-- ═══════════ TRACK TAB ═══════════ -->
+<div class="page" id="page-track">
+  <div class="track-banner" style="margin-bottom:24px">
+    💡 <strong>Tip:</strong> Run Analyze first, then Track — or use the <strong>🎯 Run Tracking</strong> button on the Upload tab after analysis. Tracking runs with <strong>YOLO11</strong> — results auto-merge for live overlays with skeleton.
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h2>Subject tracking <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:6px">powered by YOLO11</span></h2>
+      <div class="dropzone" id="trackDropzone"
+           onclick="document.getElementById('trackFileInput').click()"
+                      ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handleTrackDrop(event)">
+        <div class="icon">🎯</div>
+        <p>Drop video here or click to browse</p>
+      </div>
+      <input type="file" id="trackFileInput" accept=".mp4,.avi,.mov,.mkv,.webm" onchange="handleTrackFile(this.files[0])">
+      <div class="file-name" id="trackFileName">No file selected</div>
+
+      <!-- YOLO11 Model Selector -->
+      <div class="model-select-row">
+        <span class="model-select-label">YOLO11 model:</span>
+        <select class="model-select" id="yoloModelSelect" onchange="updateModelDesc()">
+          <option value="yolo11n">yolo11n &mdash; Nano (fastest, lightest)</option>
+          <option value="yolo11m" selected>yolo11m &mdash; Medium ✦ recommended</option>
+          <option value="yolo11l">yolo11l &mdash; Large (higher accuracy)</option>
+          <option value="yolo11m-pose">yolo11m-pose &mdash; Medium + Skeleton</option>
+          <option value="yolo11l-pose">yolo11l-pose &mdash; Large + Skeleton</option>
+        </select>
+        <span class="model-badge" id="modelBadge">51.5% mAP</span>
+      </div>
+      <div class="model-desc" id="modelDesc">Balanced accuracy &amp; speed · 20.1M params · 183ms CPU ONNX · Best default choice.</div>
+
+      <!-- Tracking Targets -->
+      <div class="track-targets-section">
+        <span class="track-targets-label">What to track:</span>
+        <div class="target-grid" id="targetGrid">
+          <!-- chips injected by JS -->
+        </div>
+        <div class="target-select-actions">
+          <button onclick="selectAllTargets()">Select all</button>
+          <button onclick="clearAllTargets()">Clear all</button>
+          <button onclick="selectTargetGroup('people')">People only</button>
+          <button onclick="selectTargetGroup('vehicles')">Vehicles only</button>
+          <button onclick="selectTargetGroup('animals')">Animals only</button>
+          <button onclick="selectTargetGroup('sports')">Sports only</button>
+        </div>
+      </div>
+
+      <!-- Confidence threshold -->
+      <div class="conf-row">
+        <label for="confSlider">Min confidence:</label>
+        <input type="range" class="conf-slider" id="confSlider" min="10" max="90" value="40"
+               oninput="document.getElementById('confVal').textContent=this.value+'%'">
+        <span class="conf-val" id="confVal">40%</span>
+      </div>
+
+      <!-- Min size filter -->
+      <div class="size-filter-row">
+        <label>Min subject size:</label>
+        <select id="sizeFilter">
+          <option value="0">Any size</option>
+          <option value="0.01" selected>Small+ (&gt;1% frame)</option>
+          <option value="0.03">Medium+ (&gt;3% frame)</option>
+          <option value="0.08">Large+ (&gt;8% frame)</option>
+        </select>
+        <label style="margin-left:8px">Max subjects/frame:</label>
+        <select id="maxSubjects">
+          <option value="0">Unlimited</option>
+          <option value="1">1 (main only)</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+
+      <br>
+      <button class="btn btn-primary" id="trackBtn" onclick="runTracking()" disabled>Run subject tracking</button>
+      <div class="progress-wrap" style="margin-top:12px"><div class="progress-bar" id="trackProgress"></div></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px" id="trackPct"></div>
+      <div class="merge-banner" id="trackMergeBanner">✅ Tracking merged into analysis — go to Upload tab to see overlays.</div>
+    </div>
+    <div class="card">
+      <h2>Clip summary</h2>
+      <div class="stats">
+        <div class="stat"><div class="stat-val" id="tFrames">—</div><div class="stat-lbl">Frames</div></div>
+        <div class="stat"><div class="stat-val" id="tShots">—</div><div class="stat-lbl">Shots</div></div>
+        <div class="stat"><div class="stat-val" id="tDetections">—</div><div class="stat-lbl">Detections</div></div>
+      </div>
+      <div class="stats" style="margin-top:0">
+        <div class="stat"><div class="stat-val" id="tPoseDets">—</div><div class="stat-lbl">Pose detections</div></div>
+        <div class="stat"><div class="stat-val" id="tAvgJoints">—</div><div class="stat-lbl">Avg joints</div></div>
+        <div class="stat"><div class="stat-val" id="tAvgPerFrame">—</div><div class="stat-lbl">Avg dets/frame</div></div>
+      </div>
+      <h2 style="margin-top:8px">Labels found</h2>
+      <div id="trackLabels" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+    </div>
+  </div>
+  <br>
+  <div class="card" id="shotsCard" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2>Shot breakdown — every frame</h2>
+      <button class="btn btn-teal" onclick="downloadTracking()">⬇ Download full JSON</button>
+    </div>
+    <div id="shotsList"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+const EFFECT_COLORS = {
+  speed_ramp:"#e85d24", freeze_moment:"#3b8bd4", rapid_motion:"#d4537e",
+  rhythmic_motion:"#1d9e75", speed_variation:"#ba7517",
+  spin_rotation:"#7f77dd", smooth_motion:"#888780",
+};
+const LABEL_COLORS = {
+  person:"#7f77dd", sports_ball:"#facc15", cat:"#1d9e75", dog:"#1d9e75",
+  bicycle:"#d4537e", car:"#d4537e", motorcycle:"#d4537e", horse:"#ba7517",
+  bird:"#3b8bd4", skateboard:"#e85d24", tennis_racket:"#d4537e",
+};
+function lc(label) { return LABEL_COLORS[label.replace(/ /g,"_")] || "#888780"; }
+
+const SKEL_COLORS = { head:"#ff4444", arms:"#ff9900", torso:"#44ff88", legs:"#4499ff" };
+const EDGE_GROUP  = [
+  "head","head","head","head",
+  "torso",
+  "arms","arms","arms","arms",
+  "torso","torso","torso",
+  "legs","legs","legs","legs",
+];
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let selectedFile    = null;
+let lastResult      = null;
+let resultFile      = null;
+let playerData      = null;
+let animFrameId     = null;   // original cinema overlay RAF
+let trackFile       = null;
+let trackResFile    = null;
+let videoFPS        = 25;
+let trackingFrameMap = {};    // frameIdx → detections[]
+let overlayRafId    = null;
+let overlayRunning  = false;
+
+// ═══════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════
+function showTab(name, el) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById("page-" + name).classList.add("active");
+  el.classList.add("active");
+}
+function showTier(name, el) {
+  document.querySelectorAll(".tier-panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tier-tab").forEach(t => t.classList.remove("active"));
+  document.getElementById("tier-" + name).classList.add("active");
+  el.classList.add("active");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILE HANDLING
+// ═══════════════════════════════════════════════════════════════
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById("dropzone").classList.remove("drag");
+  handleFile(e.dataTransfer.files[0]);
+}
+function handleFile(f) {
+  if (!f) return;
+  selectedFile = f;
+  document.getElementById("fileName").textContent = f.name + " (" + (f.size/1024/1024).toFixed(1) + " MB)";
+  document.getElementById("analyzeBtn").disabled = false;
+  document.getElementById("errorMsg").textContent = "";
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANALYZE
+// ═══════════════════════════════════════════════════════════════
+async function analyzeVideo() {
+  if (!selectedFile) return;
+  document.getElementById("loadingCard").style.display  = "block";
+  document.getElementById("effectsCard").style.display  = "none";
+  document.getElementById("summaryCard").style.display  = "none";
+  document.getElementById("playerCard").style.display   = "none";
+  document.getElementById("analyzeBtn").disabled        = true;
+  document.getElementById("errorMsg").textContent       = "";
+
+  let p = 0;
+  const bar = document.getElementById("analyzeProgress");
+  const statusEl = document.getElementById("analyzeStatus");
+  const iv = setInterval(() => {
+    p = Math.min(p + 1, 88);
+    bar.style.width = p + "%";
+    statusEl.textContent = p < 20 ? "Uploading..." : p < 50 ? "Extracting features..." : p < 75 ? "Running cinema analysis..." : "Finalizing...";
+  }, 1000);
+
+  const fd = new FormData();
+  fd.append("video", selectedFile);
+  try {
+    const res  = await fetch("/analyze", { method:"POST", body:fd });
+    const data = await res.json();
+    clearInterval(iv); bar.style.width = "100%";
+    if (data.error) {
+      document.getElementById("errorMsg").textContent = data.error;
+      document.getElementById("loadingCard").style.display = "none";
+      document.getElementById("analyzeBtn").disabled = false;
+      return;
+    }
+    lastResult = data.metadata;
+    resultFile = data.result_file;
+    const bm   = data.metadata.basic_metadata || {};
+    playerData = data.metadata;
+    renderResults(data.metadata);
+  } catch(err) {
+    clearInterval(iv);
+    document.getElementById("errorMsg").textContent = "Analysis failed: " + err.message;
+    document.getElementById("loadingCard").style.display = "none";
+    document.getElementById("analyzeBtn").disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER RESULTS
+// ═══════════════════════════════════════════════════════════════
+function renderResults(m) {
+  lastResult = m;
+  document.getElementById("loadingCard").style.display  = "none";
+  document.getElementById("effectsCard").style.display  = "block";
+  document.getElementById("summaryCard").style.display  = "block";
+  document.getElementById("analyzeBtn").disabled        = false;
+
+  const bm = m.basic_metadata    || {};
+  const am = m.advanced_metadata || {};
+  const sm = m.sensor_metadata   || {};
+
+  // Summary
+  document.getElementById("sDuration").textContent = bm.duration_seconds;
+  document.getElementById("sFps").textContent      = bm.fps;
+  document.getElementById("sFrames").textContent   = bm.total_frames;
+  document.getElementById("sDominant").textContent = (bm.dominant_effect||"").replace(/_/g," ");
+  document.getElementById("sDominant").style.background = EFFECT_COLORS[bm.dominant_effect] || "#7f77dd";
+  document.getElementById("sIntensity").textContent = (bm.motion_intensity||"") + " intensity";
+  document.getElementById("sSummary").textContent   = bm.summary || "";
+
+  // Effect bars
+  const barsEl = document.getElementById("effectBars");
+  barsEl.innerHTML = "";
+  (bm.effects_detected || []).forEach(e => {
+    const color = EFFECT_COLORS[e.effect] || "#7f77dd";
+    barsEl.innerHTML += `<div class="effect-row">
+      <div class="effect-name">${e.effect.replace(/_/g," ")}</div>
+      <div class="effect-track"><div class="effect-fill" style="width:${e.confidence}%;background:${color}"></div></div>
+      <div class="effect-pct" style="color:${color}">${e.confidence}%</div>
+    </div>`;
+  });
+
+  // Timeline
+  const tl  = document.getElementById("timeline");
+  const dur = bm.duration_seconds || 1;
+  tl.querySelectorAll(".tl-seg").forEach(el => el.remove());
+  (am.timeline || []).forEach(seg => {
+    const left  = (seg.start / dur * 100).toFixed(1);
+    const width = ((seg.end - seg.start) / dur * 100).toFixed(1);
+    const color = EFFECT_COLORS[seg.effect] || "#7f77dd";
+    tl.innerHTML += `<div class="tl-seg" style="left:${left}%;width:${width}%;background:${color}" title="${seg.effect} ${seg.start}s–${seg.end}s">${seg.effect.replace(/_/g," ")}</div>`;
+  });
+  document.getElementById("tlCursor").style.display = "block";
+  tl.onclick = e => {
+    const r = tl.getBoundingClientRect();
+    const video = document.getElementById("analysisVideo");
+    if (video.duration) video.currentTime = ((e.clientX - r.left) / r.width) * video.duration;
+  };
+
+  document.getElementById("reportBtn").style.display   = "inline-block";
+  document.getElementById("runTrackBtn").style.display = "inline-block";
+  document.getElementById("tierTabs").style.display    = "flex";
+
+  renderBasicTier(bm);
+  renderCinema(m);
+  if (am.subject_tracking) renderTrackingSummary(am.subject_tracking);
+  document.getElementById("jsonPreviewAdvanced").textContent = JSON.stringify(am, null, 2);
+  renderSensorTier(sm);
+  initPlayer(m);
+}
+
+function renderBasicTier(bm) {
+  const rows = [["File",bm.file],["Duration",bm.duration_seconds+"s"],["FPS",bm.fps],["Total frames",bm.total_frames],["Motion intensity",bm.motion_intensity],["Dominant effect",(bm.dominant_effect||"").replace(/_/g," ")],["Summary",bm.summary]];
+  document.getElementById("basicFileInfo").innerHTML = rows.map(([k,v]) =>
+    `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:12px"><span style="color:var(--muted);flex-shrink:0">${k}</span><span style="font-family:monospace;text-align:right;font-size:12px">${v??"—"}</span></div>`
+  ).join("");
+  const barsEl = document.getElementById("basicEffectBars");
+  barsEl.innerHTML = "";
+  (bm.effects_detected || []).forEach(e => {
+    const color = EFFECT_COLORS[e.effect] || "#7f77dd";
+    barsEl.innerHTML += `<div class="effect-row"><div class="effect-name">${e.effect.replace(/_/g," ")}</div><div class="effect-track"><div class="effect-fill" style="width:${e.confidence}%;background:${color}"></div></div><div class="effect-pct" style="color:${color}">${e.confidence}%</div></div>`;
+  });
+  document.getElementById("jsonPreviewBasic").textContent = JSON.stringify(bm, null, 2);
+}
+
+function renderSensorTier(sm) {
+  const feat = sm.raw_features || {};
+  const rows = [["Mean flow",feat.mean_flow],["Max flow",feat.max_flow],["Std flow",feat.std_flow],["Flow variance",feat.flow_variance],["Freeze ratio",feat.freeze_ratio],["Accel score",feat.accel_score],["Periodicity",feat.periodicity_score],["Rotation score",feat.rotation_score],["Freq ratio",feat.freq_ratio],["Flow gradient",feat.flow_gradient],["Frame diff mean",feat.frame_diff_mean],["Frame diff std",feat.frame_diff_std]];
+  document.getElementById("featureTable").innerHTML = rows.map(([k,v]) =>
+    `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted)">${k}</span><span style="font-family:monospace">${v??"—"}</span></div>`
+  ).join("");
+  const segs = sm.per_segment_flow || [];
+  if (segs.length) {
+    document.getElementById("segFlowTable").innerHTML =
+      `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--muted);border-bottom:1px solid var(--border)"><th style="padding:6px 4px;text-align:left">Start</th><th style="padding:6px 4px;text-align:left">End</th><th style="padding:6px 4px;text-align:left">Mean flow</th><th style="padding:6px 4px;text-align:left">Freeze</th><th style="padding:6px 4px;text-align:left">Burst</th></tr></thead><tbody>` +
+      segs.map(s => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 4px;color:var(--muted)">${s.t_start}s</td><td style="padding:6px 4px;color:var(--muted)">${s.t_end}s</td><td style="padding:6px 4px;font-family:monospace">${s.mean_flow}</td><td style="padding:6px 4px">${s.freeze?'<span style="color:var(--blue)">●</span>':'<span style="color:var(--border)">○</span>'}</td><td style="padding:6px 4px">${s.burst?'<span style="color:var(--coral)">●</span>':'<span style="color:var(--border)">○</span>'}</td></tr>`).join("") +
+      `</tbody></table>`;
+  } else {
+    document.getElementById("segFlowTable").innerHTML = `<span style="color:var(--muted);font-size:13px">No segment data.</span>`;
+  }
+  document.getElementById("jsonPreviewSensor").textContent = JSON.stringify(sm, null, 2);
+}
+
+function renderCinema(m) {
+  const am   = m.advanced_metadata || {};
+  const cine = am.cinematography || {};
+  if (!cine.clip_summary) return;
+  const cs = cine.clip_summary;
+  document.getElementById("cinemaCard").style.display = "block";
+  const fields = [["Light source",cs.dominant_light_source],["Direction",cs.dominant_light_direction],["Key style",cs.dominant_key_style],["Camera angle",cs.dominant_camera_angle],["Shot type",cs.dominant_shot_type],["Movement",cs.camera_movement?cs.camera_movement.movement:"—"]];
+  document.getElementById("cinemaStats").innerHTML = fields.map(([k,v]) =>
+    `<div class="stat"><div class="stat-val" style="font-size:12px;line-height:1.4">${v||"—"}</div><div class="stat-lbl">${k}</div></div>`
+  ).join("");
+  const tbody = document.getElementById("cinemaTableBody");
+  tbody.innerHTML = "";
+  (cine.segments || []).forEach(seg => {
+    const subCount = (seg.subject_lighting || []).length;
+    tbody.innerHTML += `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:7px 6px;color:var(--muted)">${seg.t_start}s–${seg.t_end}s</td>
+      <td style="padding:7px 6px">${seg.light_source||"—"}</td>
+      <td style="padding:7px 6px">${seg.light_direction||"—"}</td>
+      <td style="padding:7px 6px">${seg.key_style||"—"}</td>
+      <td style="padding:7px 6px">${seg.shot_type||"—"}</td>
+      <td style="padding:7px 6px">${seg.camera_movement||"—"}</td>
+      <td style="padding:7px 6px">${subCount>0?`<span style="color:var(--purple)">${subCount} subjects</span>`:'<span style="color:var(--muted)">—</span>'}</td>
+      <td style="padding:7px 6px">${seg.avg_kelvin||"—"}K</td>
+    </tr>`;
+  });
+}
+
+function renderTrackingSummary(ts) {
+  if (!ts) return;
+  document.getElementById("trackSummaryCard").style.display = "block";
+  document.getElementById("trackSummaryStats").innerHTML = `
+    <div class="stat"><div class="stat-val">${ts.total_frames_analyzed||0}</div><div class="stat-lbl">Frames</div></div>
+    <div class="stat"><div class="stat-val">${ts.total_shots||0}</div><div class="stat-lbl">Shots</div></div>
+    <div class="stat"><div class="stat-val">${ts.total_detections||0}</div><div class="stat-lbl">Detections</div></div>`;
+  const labelsEl = document.getElementById("trackSummaryLabels");
+  labelsEl.innerHTML = "";
+  Object.entries(ts.label_frequency || {}).forEach(([label, count]) => {
+    labelsEl.innerHTML += `<span class="badge" style="background:var(--card);border:1px solid var(--border)">${label} <span style="color:var(--purple)">${count}</span></span>`;
+  });
+}
+
+function openReport() {
+  if (resultFile) window.open("/report/" + encodeURIComponent(resultFile), "_blank");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRACKING FROM UPLOAD TAB
+// ═══════════════════════════════════════════════════════════════
+function runTrackingFromUpload() {
+  if (!selectedFile || !resultFile) return;
+  document.getElementById("trackingInlineCard").style.display = "block";
+  document.getElementById("runTrackBtn").disabled = true;
+  document.getElementById("mergeBanner").style.display = "none";
+  document.getElementById("trackInlineStatus").textContent = "Starting YOLO11 detection…";
+  const params = getTrackingParams();
+  const fd = new FormData();
+  fd.append("video",        selectedFile);
+  fd.append("model",        params.model);
+  fd.append("targets",      JSON.stringify(params.targets));
+  fd.append("confidence",   params.confidence);
+  fd.append("min_size",     params.min_size);
+  fd.append("max_subjects", params.max_subjects);
+  fetch("/track", { method:"POST", body:fd });
+  const iv = setInterval(async () => {
+    const res  = await fetch("/track/status");
+    const data = await res.json();
+    document.getElementById("trackInlineProgress").style.width = data.progress + "%";
+    document.getElementById("trackInlineStatus").textContent =
+      data.status === "running" ? `YOLO11 (${selModel||"yolo11m"}) detecting… ${data.progress}%` :
+      data.status === "done"    ? "Done!" :
+      data.status === "error"   ? "Error: " + data.error : data.status;
+    if (data.status === "done") {
+      clearInterval(iv);
+      document.getElementById("runTrackBtn").disabled = false;
+      if (data.result) ingestTrackingData(data.result);
+      if (data.merged_metadata) {
+        lastResult = data.merged_metadata;
+        playerData = data.merged_metadata;
+        renderCinema(data.merged_metadata);
+        const am = data.merged_metadata.advanced_metadata || {};
+        if (am.subject_tracking) renderTrackingSummary(am.subject_tracking);
+        document.getElementById("jsonPreviewAdvanced").textContent = JSON.stringify(am, null, 2);
+      }
+      document.getElementById("mergeBanner").style.display = "block";
+      document.getElementById("skelLegend").style.display  = "flex";
+      document.getElementById("framePanel").style.display  = "block";
+      renderTrackingResults(data.result);
+      startContinuousOverlay();
+    }
+    if (data.status === "error") {
+      clearInterval(iv);
+      document.getElementById("runTrackBtn").disabled = false;    }
+  }, 1000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRAIN
+// ═══════════════════════════════════════════════════════════════
+async function trainModel() {
+  document.getElementById("trainBtn").disabled = true;
+  document.getElementById("trainDot").className = "dot dot-yellow";
+  document.getElementById("trainStatusText").textContent = "Training...";
+  await fetch("/train", { method:"POST" });
+  const iv = setInterval(async () => {
+    const res  = await fetch("/train/status");
+    const data = await res.json();
+    document.getElementById("trainProgress").style.width = data.progress + "%";
+    document.getElementById("trainPct").textContent      = data.progress + "%";
+    if (data.status === "done") {
+      clearInterval(iv);
+      document.getElementById("trainDot").className = "dot dot-green";
+      document.getElementById("trainStatusText").textContent = "Model ready";
+      document.getElementById("trainBtn").disabled   = false;
+      document.getElementById("metricsCard").style.display = "block";
+      document.getElementById("mAcc").textContent = data.result.accuracy + "%";
+      const f1El = document.getElementById("f1Bars");
+      f1El.innerHTML = "";
+      Object.entries(data.result.f1_scores || {}).forEach(([effect, score]) => {
+        const color = EFFECT_COLORS[effect] || "#7f77dd";
+        f1El.innerHTML += `<div class="effect-row"><div class="effect-name">${effect.replace(/_/g," ")}</div><div class="effect-track"><div class="effect-fill" style="width:${score*100}%;background:${color}"></div></div><div class="effect-pct">${score}</div></div>`;
+      });
+    }
+  }, 500);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VIDEO PLAYER
+// ═══════════════════════════════════════════════════════════════
+function initPlayer(metadata) {
+  playerData = metadata;
+  const card      = document.getElementById("playerCard");
+  const video     = document.getElementById("analysisVideo");
+  const statusMsg = document.getElementById("videoStatusMsg");
+  const bm        = (metadata || {}).basic_metadata || {};
+  const videoFile = bm.playable_file || null;
+
+  card.style.display = "block";
+  card.scrollIntoView({ behavior:"smooth" });
+
+  if (!videoFile) {
+    statusMsg.style.display = "block";
+    statusMsg.textContent   = "Video file not available for playback.";
+    video.style.display     = "none";
+    return;
+  }
+  statusMsg.style.display = "none";
+  video.style.display     = "block";
+  video.pause();
+  video.removeAttribute("src");
+  video.load();
+  video.src = "/video/" + encodeURIComponent(videoFile);
+  video.load();
+
+  video.onloadedmetadata = syncCanvasSize;
+  window.onresize        = syncCanvasSize;
+  video.onerror = () => {
+    statusMsg.style.display = "block";
+    statusMsg.textContent   = "Video failed to load. Install ffmpeg: winget install ffmpeg";
+    video.style.display     = "none";
+  };
+  video.ontimeupdate = onVideoTick;
+  video.onplay       = startContinuousOverlay;
+  video.onpause      = stopContinuousOverlay;
+  video.onended      = stopContinuousOverlay;
+  video.onseeked     = drawOverlayFrame;
+}
+
+function syncCanvasSize() {
+  const video  = document.getElementById("analysisVideo");
+  const canvas = document.getElementById("overlayCanvas");
+  if (video.clientWidth > 0) {
+    canvas.width  = video.clientWidth;
+    canvas.height = video.clientHeight;
+  }
+}
+
+// ─── Live bar + timeline cursor ───────────────────────────────
+function onVideoTick() {
+  const video = document.getElementById("analysisVideo");
+  const t     = video.currentTime;
+  document.getElementById("liveTime").textContent  = t.toFixed(2) + "s";
+  document.getElementById("liveFrame").textContent = Math.round(t * (videoFPS || 25));
+  const cursor = document.getElementById("tlCursor");
+  if (cursor && video.duration) cursor.style.left = (t / video.duration * 100).toFixed(2) + "%";
+  const m  = playerData;
+  if (!m) return;
+  const am = m.advanced_metadata || {};
+  if (am.timeline) {
+    const seg = am.timeline.find(s => t >= s.start && t <= s.end);
+    document.getElementById("liveEffect").textContent = seg ? seg.effect.replace(/_/g," ") : "—";
+  }
+  const segs = am.cinematography && am.cinematography.segments;
+  if (segs) {
+    const cseg = segs.find(s => t >= s.t_start && t <= s.t_end);
+    if (cseg) {
+      document.getElementById("liveLighting").textContent = (cseg.light_source||"—").split("(")[0].trim();
+      document.getElementById("liveShot").textContent     = cseg.shot_type || "—";
+      document.getElementById("liveSubjects").textContent = (cseg.subject_lighting||[]).length > 0 ? cseg.subject_lighting.length + " detected" : "—";
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONTINUOUS OVERLAY ENGINE
+// ═══════════════════════════════════════════════════════════════
+function ingestTrackingData(trackResult) {
+  trackingFrameMap = {};
+  videoFPS = (trackResult.clip_summary && trackResult.clip_summary.fps) || 25;
+  (trackResult.shots || []).forEach(shot => {
+    (shot.frames || []).forEach(f => { trackingFrameMap[f.frame] = f.detections || []; });
+  });
+}
+
+function getDetectionsAt(frameIdx) {
+  if (trackingFrameMap[frameIdx]) return trackingFrameMap[frameIdx];
+  for (let d = 1; d <= 6; d++) {
+    if (trackingFrameMap[frameIdx - d]) return trackingFrameMap[frameIdx - d];
+    if (trackingFrameMap[frameIdx + d]) return trackingFrameMap[frameIdx + d];
+  }
+  return [];
+}
+
+function startContinuousOverlay() {
+  if (overlayRunning) return;
+  overlayRunning = true;
+  function loop() { drawOverlayFrame(); overlayRafId = requestAnimationFrame(loop); }
+  overlayRafId = requestAnimationFrame(loop);
+}
+function stopContinuousOverlay() {
+  overlayRunning = false;
+  if (overlayRafId) { cancelAnimationFrame(overlayRafId); overlayRafId = null; }
+  drawOverlayFrame(); // keep last frame visible on pause
+}
+
+function drawOverlayFrame() {
+  const video  = document.getElementById("analysisVideo");
+  const canvas = document.getElementById("overlayCanvas");
+  const ctx    = canvas.getContext("2d");
+
+  if (video.clientWidth !== canvas.width || video.clientHeight !== canvas.height) {
+    canvas.width  = video.clientWidth  || canvas.width;
+    canvas.height = video.clientHeight || canvas.height;
+  }
+  const cw = canvas.width, ch = canvas.height;
+  const vw = video.videoWidth  || cw;
+  const vh = video.videoHeight || ch;
+  const sx = cw / vw, sy = ch / vh;
+  const t  = video.currentTime;
+  ctx.clearRect(0, 0, cw, ch);
+
+  const showEffects  = document.getElementById("showEffects").checked;
+  const showBboxes   = document.getElementById("showBboxes").checked;
+  const showLighting = document.getElementById("showLighting").checked;
+  const showSkel     = document.getElementById("showSkeleton").checked;
+  const showAllObj   = document.getElementById("showAllObj").checked;
+  const m  = playerData;
+  const am = (m || {}).advanced_metadata || {};
+
+  // 1. Effect label
+  if (showEffects && am.timeline) {
+    const seg = am.timeline.find(s => t >= s.start && t <= s.end);
+    if (seg) {
+      const col = EFFECT_COLORS[seg.effect] || "#7f77dd";
+      const lbl = "Effect: " + seg.effect.replace(/_/g," ");
+      ctx.font = "bold 13px system-ui";
+      const tw = ctx.measureText(lbl).width;
+      ctx.fillStyle = col + "cc"; ctx.fillRect(8, 8, tw + 16, 26);
+      ctx.fillStyle = "#fff"; ctx.fillText(lbl, 16, 25);
+    }
+  }
+
+  // 2. Cinema overlay (light / shot)
+  const segs = am.cinematography && am.cinematography.segments;
+  let cseg = null;
+  if (segs) {
+    cseg = segs.find(s => t >= s.t_start && t <= s.t_end);
+    if (cseg) {
+      const srcText = "Light: " + (cseg.light_source||"").split("(")[0].trim();
+      ctx.font = "11px system-ui";
+      ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillRect(8, 40, ctx.measureText(srcText).width + 16, 22);
+      ctx.fillStyle = "#ba7517"; ctx.fillText(srcText, 14, 55);
+      const dirText = "Dir: " + (cseg.light_direction||"").split("(")[0].trim();
+      ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillRect(8, 66, ctx.measureText(dirText).width + 16, 22);
+      ctx.fillStyle = "#e8eaf0"; ctx.fillText(dirText, 14, 81);
+      const shotLabel = cseg.shot_type || "";
+      ctx.font = "12px system-ui";
+      const shotW = ctx.measureText(shotLabel).width;
+      ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillRect(cw - shotW - 20, 8, shotW + 14, 26);
+      ctx.fillStyle = "#1d9e75"; ctx.fillText(shotLabel, cw - shotW - 13, 25);
+    }
+  }
+
+  // 3. Subject lighting boxes (cinema-based)
+  if (cseg) {
+    (cseg.subject_lighting || []).forEach(sl => {
+      const bb = sl.subject_bbox; if (!bb) return;
+      const bx = bb.x*sx, by = bb.y*sy, bw = bb.w*sx, bh = bb.h*sy;
+      if (showBboxes) {
+        ctx.strokeStyle = "#7f77dd"; ctx.lineWidth = 2; ctx.setLineDash([]);
+        ctx.strokeRect(bx, by, bw, bh);
+        const tag = (sl.label||"subject") + " #" + sl.subject_id;
+        ctx.font = "bold 11px system-ui";
+        const tagW = ctx.measureText(tag).width;
+        ctx.fillStyle = "#7f77ddcc"; ctx.fillRect(bx, by - 20, tagW + 8, 20);
+        ctx.fillStyle = "#fff"; ctx.fillText(tag, bx + 4, by - 5);
+      }
+      if (showLighting) {
+        if (sl.highlight_coords) {
+          const hc = sl.highlight_coords;
+          ctx.strokeStyle = "#facc15"; ctx.lineWidth = 1.5; ctx.setLineDash([3,3]);
+          ctx.strokeRect(hc.x*sx, hc.y*sy, hc.w*sx, hc.h*sy); ctx.setLineDash([]);
+          ctx.fillStyle = "#facc15cc"; ctx.fillRect(hc.x*sx, hc.y*sy-16, 62, 16);
+          ctx.fillStyle = "#000"; ctx.font = "10px system-ui"; ctx.fillText("highlight", hc.x*sx+3, hc.y*sy-4);
+        }
+        if (sl.shadow_coords) {
+          const sc = sl.shadow_coords;
+          ctx.strokeStyle = "#6366f1"; ctx.lineWidth = 1.5; ctx.setLineDash([3,3]);
+          ctx.strokeRect(sc.x*sx, sc.y*sy, sc.w*sx, sc.h*sy); ctx.setLineDash([]);
+          ctx.fillStyle = "#6366f1cc"; ctx.fillRect(sc.x*sx, sc.y*sy-16, 50, 16);
+          ctx.fillStyle = "#fff"; ctx.font = "10px system-ui"; ctx.fillText("shadow", sc.x*sx+3, sc.y*sy-4);
+        }
+        const cx2=(bb.x+bb.w/2)*sx, cy2=(bb.y+bb.h/2)*sy;
+        const ld=sl.light_direction_on_subject||"";
+        let ax=0,ay=0;
+        if(ld.includes("top"))ay=-1; if(ld.includes("bottom"))ay=1;
+        if(ld.includes("left"))ax=-1; if(ld.includes("right"))ax=1;
+        if(ax!==0||ay!==0){
+          const al=Math.min(bw,bh)*0.35, ox=cx2-ax*al, oy=cy2-ay*al;
+          ctx.strokeStyle="#facc15";ctx.lineWidth=2;ctx.setLineDash([]);
+          ctx.beginPath();ctx.moveTo(ox,oy);ctx.lineTo(cx2,cy2);ctx.stroke();
+          const ang=Math.atan2(cy2-oy,cx2-ox);
+          ctx.beginPath();ctx.moveTo(cx2,cy2);
+          ctx.lineTo(cx2-10*Math.cos(ang-0.4),cy2-10*Math.sin(ang-0.4));
+          ctx.lineTo(cx2-10*Math.cos(ang+0.4),cy2-10*Math.sin(ang+0.4));
+          ctx.closePath();ctx.fillStyle="#facc15";ctx.fill();
+        }
+        const exp=sl.exposure||"";
+        const expColor=exp.includes("over")?"#ef4444":exp.includes("under")?"#3b8bd4":"#1d9e75";
+        ctx.font="10px system-ui";const expW=ctx.measureText(exp).width;
+        ctx.fillStyle=expColor+"cc";ctx.fillRect(bx,by+bh+2,expW+8,16);
+        ctx.fillStyle="#fff";ctx.fillText(exp,bx+4,by+bh+13);
+      }
+    });
+  }
+
+  // 4. YOLO tracking overlay (continuous)
+  const frameIdx = Math.round(t * (videoFPS || 25));
+  const dets     = getDetectionsAt(frameIdx);
+  dets.forEach(det => {
+    const isPerson = det.label === "person";
+    if (!showAllObj && !isPerson) return;
+    const b  = det.bbox;
+    const bx = b.x*sx, by = b.y*sy, bw = b.w*sx, bh = b.h*sy;
+    const color = lc(det.label);
+    if (showBboxes) {
+      ctx.strokeStyle = color; ctx.lineWidth = isPerson ? 2 : 1.5;
+      ctx.setLineDash(isPerson ? [] : [5,3]); ctx.strokeRect(bx, by, bw, bh); ctx.setLineDash([]);
+      const cl = Math.min(bw,bh)*0.2; ctx.lineWidth = 2.5;
+      [[bx,by,1,1],[bx+bw,by,-1,1],[bx,by+bh,1,-1],[bx+bw,by+bh,-1,-1]].forEach(([cx,cy,dx,dy]) => {
+        ctx.beginPath(); ctx.moveTo(cx,cy+dy*cl); ctx.lineTo(cx,cy); ctx.lineTo(cx+dx*cl,cy);
+        ctx.strokeStyle = color; ctx.stroke();
+      });
+      const lbl = det.label + " " + Math.round(det.confidence*100) + "%";
+      ctx.font = "bold 10px system-ui";
+      const lw = ctx.measureText(lbl).width;
+      const ly = by > 16 ? by - 2 : by + bh + 14;
+      ctx.fillStyle = color; ctx.fillRect(bx, ly-13, lw+8, 15);
+      ctx.fillStyle = "#000"; ctx.fillText(lbl, bx+4, ly);
+    }
+    if (showSkel && isPerson && det.pose) {
+      (det.pose.skeleton_edges || []).forEach((edge, ei) => {
+        const grp = EDGE_GROUP[ei] || "torso";
+        ctx.beginPath(); ctx.moveTo(edge.x1*sx, edge.y1*sy); ctx.lineTo(edge.x2*sx, edge.y2*sy);
+        ctx.strokeStyle = SKEL_COLORS[grp]||"#fff"; ctx.lineWidth = 2;
+        ctx.globalAlpha = Math.max(0.45, edge.confidence||0.8); ctx.setLineDash([]); ctx.stroke(); ctx.globalAlpha = 1;
+      });
+      (det.pose.keypoints||[]).filter(kp=>kp.visible).forEach(kp => {
+        ctx.beginPath(); ctx.arc(kp.x*sx, kp.y*sy, 3, 0, Math.PI*2);
+        ctx.fillStyle = "#fff"; ctx.globalAlpha = Math.max(0.3, kp.confidence||0.7); ctx.fill(); ctx.globalAlpha = 1;
+      });
+    }
+  });
+
+  // 5. Per-frame detection panel
+  const panel = document.getElementById("framePanel");
+  if (panel.style.display !== "none") {
+    document.getElementById("fpFrame").textContent = frameIdx;
+    document.getElementById("fpTs").textContent    = t.toFixed(3) + "s";
+    document.getElementById("fpCount").textContent = dets.length;
+    document.getElementById("fpList").innerHTML    = dets.length === 0
+      ? '<div style="color:var(--muted);font-size:11px;padding:4px 0">No detections this frame</div>'
+      : dets.filter(d => showAllObj || d.label === "person").map(d => {
+          const hp = d.label==="person" && d.pose;
+          return `<div class="det-row">
+            <span class="det-label" style="color:${lc(d.label)}">${d.label}</span>
+            <span class="det-conf">${Math.round(d.confidence*100)}%</span>
+            <span class="det-pos">${d.position_in_frame||""}</span>
+            <span class="det-sz">${d.relative_size||""}</span>
+            <span class="det-dep">${d.depth_hint||""}</span>
+            ${hp?`<span class="pose-badge">🦴 ${d.pose.visible_joints}/${d.pose.total_joints}</span>`:""}
+          </div>`;
+        }).join("");
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRACK TAB
+// ═══════════════════════════════════════════════════════════════
+function handleTrackDrop(e) { e.preventDefault(); document.getElementById("trackDropzone").classList.remove("drag"); handleTrackFile(e.dataTransfer.files[0]); }
+function handleTrackFile(f) {
+  if (!f) return;
+  trackFile = f;
+  document.getElementById("trackFileName").textContent = f.name + " (" + (f.size/1024/1024).toFixed(1) + " MB)";
+  document.getElementById("trackBtn").disabled = false;
+}
+
+async function runTracking() {
+  if (!trackFile) return;
+  document.getElementById("trackBtn").disabled       = true;
+  document.getElementById("trackPct").textContent    = "Starting...";
+  document.getElementById("shotsCard").style.display = "none";
+  document.getElementById("trackMergeBanner").style.display = "none";
+  const params = getTrackingParams();
+  const fd = new FormData();
+  fd.append("video", trackFile);
+  fd.append("model",        params.model);
+  fd.append("targets",      JSON.stringify(params.targets));
+  fd.append("confidence",   params.confidence);
+  fd.append("min_size",     params.min_size);
+  fd.append("max_subjects", params.max_subjects);
+  await fetch("/track", { method:"POST", body:fd });
+  const iv = setInterval(async () => {
+    const res  = await fetch("/track/status");
+    const data = await res.json();
+    document.getElementById("trackProgress").style.width = data.progress + "%";
+    document.getElementById("trackPct").textContent      = data.progress + "%";
+    if (data.status === "error") { clearInterval(iv); document.getElementById("trackBtn").disabled = false; document.getElementById("trackPct").textContent = "Error: " + (data.error||"unknown"); }
+    if (data.status === "done") {      clearInterval(iv);
+      document.getElementById("trackBtn").disabled = false;
+      trackResFile = data.result_file;
+      if (data.result) ingestTrackingData(data.result);
+      if (data.merged_metadata) {
+        lastResult = data.merged_metadata; playerData = data.merged_metadata;
+        renderCinema(data.merged_metadata);
+        document.getElementById("trackMergeBanner").style.display = "block";
+        document.getElementById("skelLegend").style.display = "flex";
+        document.getElementById("framePanel").style.display  = "block";
+        startContinuousOverlay();
+      }
+      renderTrackingResults(data.result);
+    }
+  }, 1000);
+}
+
+function renderTrackingResults(data) {
+  if (!data || !data.clip_summary) return;
+  const cs = data.clip_summary;
+  document.getElementById("tFrames").textContent      = cs.total_frames_analyzed;
+  document.getElementById("tShots").textContent       = cs.total_shots;
+  document.getElementById("tDetections").textContent  = cs.total_detections;
+  document.getElementById("tPoseDets").textContent    = cs.pose_detections    || "—";
+  document.getElementById("tAvgJoints").textContent   = cs.avg_visible_joints || "—";
+  document.getElementById("tAvgPerFrame").textContent = cs.avg_detections_per_frame || "—";
+  const labelsEl = document.getElementById("trackLabels");
+  labelsEl.innerHTML = "";
+  Object.entries(cs.label_frequency || {}).forEach(([label, count]) => {
+    labelsEl.innerHTML += `<span class="badge" style="background:var(--card);border:1px solid ${lc(label)}44;color:${lc(label)}">${label} <span style="color:var(--purple)">${count}</span></span>`;
+  });
+  document.getElementById("shotsCard").style.display = "block";
+  renderShotsList(data.shots || []);
+}
+
+function renderShotsList(shots) {
+  const shotsList = document.getElementById("shotsList");
+  shotsList.innerHTML = "";
+  shots.forEach(shot => {
+    const topLabels = (shot.dominant_subjects||[]).map(l => `<span class="badge" style="background:${lc(l)}33;color:${lc(l)};margin-right:4px">${l}</span>`).join("");
+    const frameRows = (shot.frames||[]).slice(0,3).map(f => {
+      const dets = (f.detections||[]).map(d => {
+        const hasPose = d.label==="person" && d.pose;
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:4px 8px;color:var(--muted)">${d.id}</td>
+          <td style="padding:4px 8px;color:${lc(d.label)};font-weight:600">${d.label}</td>
+          <td style="padding:4px 8px;font-family:monospace;font-size:11px">(${d.bbox.x},${d.bbox.y}) ${d.bbox.w}×${d.bbox.h}</td>
+          <td style="padding:4px 8px">${d.position_in_frame}</td>
+          <td style="padding:4px 8px">${d.relative_size}</td>
+          <td style="padding:4px 8px">${d.depth_hint}</td>
+          <td style="padding:4px 8px">${Math.round(d.confidence*100)}%</td>
+          <td style="padding:4px 8px">${hasPose?`<span style="color:var(--purple)">🦴 ${d.pose.visible_joints}/17</span>`:"—"}</td>
+        </tr>`;
+      }).join("");
+      return dets ? `<div style="font-size:11px;color:var(--muted);margin:6px 0 2px">Frame ${f.frame} @ ${f.timestamp_sec}s — ${f.subject_count} subjects</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="color:var(--muted)"><th style="padding:4px 8px;text-align:left">#</th><th style="padding:4px 8px;text-align:left">Label</th><th style="padding:4px 8px;text-align:left">BBox</th><th style="padding:4px 8px;text-align:left">Position</th><th style="padding:4px 8px;text-align:left">Size</th><th style="padding:4px 8px;text-align:left">Depth</th><th style="padding:4px 8px;text-align:left">Conf</th><th style="padding:4px 8px;text-align:left">Pose</th></tr></thead>
+          <tbody>${dets}</tbody></table>` : "";
+    }).join("");
+    shotsList.innerHTML += `<div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-weight:600">Shot ${shot.shot_number}</span>
+        <span style="color:var(--muted);font-size:13px">${shot.start_time}s – ${shot.end_time}s (${shot.duration}s)</span>
+      </div>
+      <div style="margin-bottom:8px">${topLabels}</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px">Avg ${shot.avg_subject_count} subjects/frame · Dominant: ${shot.dominant_position}${shot.pose_coverage_pct!=null?" · Pose coverage: "+shot.pose_coverage_pct+"%":""}</div>
+      ${frameRows}
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">Showing 3 of ${(shot.frames||[]).length} frames — download JSON for all</div>
+    </div>`;
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// YOLO11 MODEL SELECTOR
+// ═══════════════════════════════════════════════════════════════
+const YOLO_MODEL_INFO = {
+  "yolo11n":      { mAP:"39.5% mAP", desc:"Nano — ultra-fast, lowest accuracy. Best for real-time on CPU-only machines. ~2.6M params." },
+  "yolo11m":      { mAP:"51.5% mAP", desc:"Medium — balanced accuracy & speed. 20.1M params, 183ms CPU ONNX. Best default choice." },
+  "yolo11l":      { mAP:"53.4% mAP", desc:"Large — higher accuracy, slower. 25.3M params. Recommended for high-quality analysis." },
+  "yolo11m-pose": { mAP:"51.5% mAP", desc:"Medium + Pose — detects persons AND skeleton joints (17 keypoints). Recommended when skeleton overlay is needed." },
+  "yolo11l-pose": { mAP:"53.4% mAP", desc:"Large + Pose — best skeleton accuracy. Slowest; use when pose detail is critical." },
+};
+function updateModelDesc() {
+  const sel   = document.getElementById("yoloModelSelect");
+  const badge = document.getElementById("modelBadge");
+  const desc  = document.getElementById("modelDesc");
+  if (!sel) return;
+  const info = YOLO_MODEL_INFO[sel.value] || {};
+  if (badge) badge.textContent = info.mAP || "";
+  if (desc)  desc.textContent  = info.desc || "";
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// TRACKING TARGET SELECTOR
+// ═══════════════════════════════════════════════════════════════
+const TRACK_TARGETS = [
+  // People
+  { id:"person",          label:"Person",        icon:"🧍", group:"people" },
+  // Vehicles
+  { id:"car",             label:"Car",           icon:"🚗", group:"vehicles" },
+  { id:"truck",           label:"Truck",         icon:"🚚", group:"vehicles" },
+  { id:"bus",             label:"Bus",           icon:"🚌", group:"vehicles" },
+  { id:"motorcycle",      label:"Motorcycle",    icon:"🏍️", group:"vehicles" },
+  { id:"bicycle",         label:"Bicycle",       icon:"🚲", group:"vehicles" },
+  { id:"airplane",        label:"Airplane",      icon:"✈️", group:"vehicles" },
+  { id:"boat",            label:"Boat",          icon:"⛵", group:"vehicles" },
+  { id:"train",           label:"Train",         icon:"🚂", group:"vehicles" },
+  // Animals
+  { id:"cat",             label:"Cat",           icon:"🐱", group:"animals" },
+  { id:"dog",             label:"Dog",           icon:"🐶", group:"animals" },
+  { id:"horse",           label:"Horse",         icon:"🐴", group:"animals" },
+  { id:"bird",            label:"Bird",          icon:"🐦", group:"animals" },
+  { id:"cow",             label:"Cow",           icon:"🐄", group:"animals" },
+  { id:"sheep",           label:"Sheep",         icon:"🐑", group:"animals" },
+  { id:"elephant",        label:"Elephant",      icon:"🐘", group:"animals" },
+  { id:"bear",            label:"Bear",          icon:"🐻", group:"animals" },
+  { id:"zebra",           label:"Zebra",         icon:"🦓", group:"animals" },
+  { id:"giraffe",         label:"Giraffe",       icon:"🦒", group:"animals" },
+  // Sports & objects
+  { id:"sports_ball",     label:"Sports ball",   icon:"⚽", group:"sports" },
+  { id:"skateboard",      label:"Skateboard",    icon:"🛹", group:"sports" },
+  { id:"tennis_racket",   label:"Tennis racket", icon:"🎾", group:"sports" },
+  { id:"baseball_bat",    label:"Baseball bat",  icon:"⚾", group:"sports" },
+  { id:"baseball_glove",  label:"Baseball glove",icon:"🥊", group:"sports" },
+  { id:"frisbee",         label:"Frisbee",       icon:"🥏", group:"sports" },
+  { id:"snowboard",       label:"Snowboard",     icon:"🏂", group:"sports" },
+  { id:"skis",            label:"Skis",          icon:"⛷️", group:"sports" },
+  { id:"surfboard",       label:"Surfboard",     icon:"🏄", group:"sports" },
+  { id:"kite",            label:"Kite",          icon:"🪁", group:"sports" },
+];
+
+// Default: person selected
+let selectedTargets = new Set(["person"]);
+
+function buildTargetGrid() {
+  const grid = document.getElementById("targetGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+  TRACK_TARGETS.forEach(t => {
+    const chip = document.createElement("label");
+    chip.className = "target-chip" + (selectedTargets.has(t.id) ? " selected" : "");
+    chip.dataset.id = t.id;
+    chip.dataset.group = t.group;
+    chip.innerHTML = `<input type="checkbox" value="${t.id}" ${selectedTargets.has(t.id)?"checked":""}><span class="chip-icon">${t.icon}</span>${t.label}`;
+    chip.onclick = (e) => {
+      e.preventDefault();
+      if (selectedTargets.has(t.id)) selectedTargets.delete(t.id);
+      else selectedTargets.add(t.id);
+      chip.classList.toggle("selected", selectedTargets.has(t.id));
+      chip.querySelector("input").checked = selectedTargets.has(t.id);
+    };
+    grid.appendChild(chip);
+  });
+}
+
+function selectAllTargets() {
+  TRACK_TARGETS.forEach(t => selectedTargets.add(t.id));
+  buildTargetGrid();
+}
+function clearAllTargets() {
+  selectedTargets.clear();
+  buildTargetGrid();
+}
+function selectTargetGroup(group) {
+  selectedTargets.clear();
+  TRACK_TARGETS.filter(t => t.group === group).forEach(t => selectedTargets.add(t.id));
+  buildTargetGrid();
+}
+
+function getTrackingParams() {
+  return {
+    targets:     Array.from(selectedTargets),
+    confidence:  parseFloat((document.getElementById("confSlider")||{value:"40"}).value) / 100,
+    min_size:    parseFloat((document.getElementById("sizeFilter")||{value:"0.01"}).value),
+    max_subjects:parseInt((document.getElementById("maxSubjects")||{value:"3"}).value),
+    model:       (document.getElementById("yoloModelSelect")||{value:"yolo11m"}).value,
+  };
+}
+
+// Init grid on DOM ready
+document.addEventListener("DOMContentLoaded", buildTargetGrid);
+
+function downloadTracking() { if (trackResFile) window.location.href = "/download/" + trackResFile; }
+</script>
+<!-- ═══════════ EXTRACT TAB ═══════════ -->
+<div class="page" id="page-extract">
+  <div class="grid2">
+    <div>
+      <div class="card">
+        <h2>Feature extraction</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
+          Upload any video. The extractor auto-detects which feature categories apply
+          (motion, color, brightness, texture, scene) and runs the full pipeline.
+          Each extracted value is then verified against expected ranges.
+        </p>
+        <div class="dropzone" id="extractDropzone"
+             onclick="document.getElementById('extractFileInput').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleExtractDrop(event)">
+          <div class="icon">⚙</div>
+          <p>Drop video here or click to browse</p>
+        </div>
+        <input type="file" id="extractFileInput" accept=".mp4,.avi,.mov,.mkv,.webm" onchange="handleExtractFile(this.files[0])">
+        <div class="file-name" id="extractFileName">No file selected</div>
+        <br>
+        <button class="btn btn-primary" id="extractBtn" onclick="runExtraction()" disabled>⚙ Extract Features</button>
+        <div class="progress-wrap" style="margin-top:12px"><div class="progress-bar" id="extractProgress"></div></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px" id="extractStatus"></div>
+      </div>
+
+      <!-- File info -->
+      <div class="card" id="extractFileInfo" style="display:none;margin-top:0">
+        <h2>File info</h2>
+        <div id="extractFileInfoBody" style="font-size:13px"></div>
+      </div>
+
+      <!-- Categories detected -->
+      <div class="card" id="extractCats" style="display:none;margin-top:0">
+        <h2>Auto-detected categories</h2>
+        <div id="extractCatsBody" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px"></div>
+      </div>
+
+      <!-- Verification summary -->
+      <div class="card" id="extractVerifSummary" style="display:none;margin-top:0">
+        <h2>Verification summary</h2>
+        <div id="extractVerifSummaryBody"></div>
+        <div style="margin-top:14px">
+          <button class="btn btn-teal btn-sm" style="font-size:12px;padding:6px 14px" onclick="downloadExtract()">⬇ Download features JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <!-- Per-category verification -->
+      <div class="card" id="extractVerifDetail" style="display:none">
+        <h2>Verification — per check</h2>
+        <div id="extractVerifDetailBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature values grouped by category -->
+  <div id="extractFeatureCards" style="display:none;margin-top:24px">
+    <div style="font-size:15px;font-weight:600;margin-bottom:16px">Extracted feature values</div>
+    <div id="extractFeatureCardsBody" class="grid2"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// EXTRACT TAB
+// ═══════════════════════════════════════════════════════════════
+let extractFile    = null;
+let extractResFile = null;
+
+function handleExtractDrop(e) {
+  e.preventDefault();
+  document.getElementById("extractDropzone").classList.remove("drag");
+  handleExtractFile(e.dataTransfer.files[0]);
+}
+function handleExtractFile(f) {
+  if (!f) return;
+  extractFile = f;
+  document.getElementById("extractFileName").textContent = f.name + " (" + (f.size/1024/1024).toFixed(1) + " MB)";
+  document.getElementById("extractBtn").disabled = false;
+}
+
+async function runExtraction() {
+  if (!extractFile) return;
+  document.getElementById("extractBtn").disabled = true;
+  document.getElementById("extractProgress").style.width = "3%";
+  document.getElementById("extractStatus").textContent   = "Starting...";
+  ["extractFileInfo","extractCats","extractVerifSummary","extractVerifDetail","extractFeatureCards"].forEach(id => {
+    document.getElementById(id).style.display = "none";
+  });
+
+  const fd = new FormData();
+  fd.append("video", extractFile);
+  await fetch("/extract", { method:"POST", body:fd });
+
+  const iv = setInterval(async () => {
+    const res  = await fetch("/extract/status");
+    const data = await res.json();
+    document.getElementById("extractProgress").style.width = data.progress + "%";
+
+    if (data.status === "running") {
+      const p = data.progress;
+      document.getElementById("extractStatus").textContent =
+        p < 10 ? "Detecting categories…" :
+        p < 30 ? "Extracting motion features…" :
+        p < 50 ? "Extracting color & brightness…" :
+        p < 70 ? "Extracting texture features…" :
+        p < 85 ? "Analysing scene structure…" :
+        "Verifying features…";
+    }
+
+    if (data.status === "done") {
+      clearInterval(iv);
+      document.getElementById("extractBtn").disabled      = false;
+      document.getElementById("extractStatus").textContent = "✅ Extraction complete";
+      extractResFile = data.result_file;
+      renderExtractionResults(data.result);
+    }
+    if (data.status === "error") {
+      clearInterval(iv);
+      document.getElementById("extractBtn").disabled      = false;
+      document.getElementById("extractStatus").textContent = "❌ " + (data.error || "Unknown error");
+    }
+  }, 800);
+}
+
+function renderExtractionResults(result) {
+  if (!result) return;
+  const { file_info = {}, categories = {}, features = {}, verification = {}, summary = {} } = result;
+
+  const fmt = (v) => {
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(4).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+    return String(v).replace(/_/g, ' ');
+  };
+
+  document.getElementById("extractFileInfo").style.display = "block";
+  document.getElementById("extractFileInfoBody").innerHTML =
+    Object.entries(file_info).map(([k,v]) =>
+      `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <span style="color:var(--muted)">${k.replace(/_/g," ")}</span>
+        <span style="font-family:monospace">${fmt(v)}</span>
+      </div>`
+    ).join("");
+
+  document.getElementById("extractCats").style.display = "block";
+  document.getElementById("extractCatsBody").innerHTML =
+    Object.entries(categories).map(([cat, enabled]) =>
+      `<span class="badge" style="background:${enabled ? 'rgba(29,158,117,.15)' : 'rgba(136,135,128,.1)'};color:${enabled ? 'var(--teal)' : 'var(--muted)'};border:1px solid ${enabled ? 'var(--teal)' : 'var(--border)'}">
+        ${enabled ? '✓' : '—'} ${cat}
+      </span>`
+    ).join("");
+
+  document.getElementById("extractVerifSummary").style.display = "block";
+  const overallPct = Math.round((summary.overall_confidence || 0) * 100);
+  const overallColor = overallPct >= 80 ? "var(--teal)" : overallPct >= 50 ? "var(--amber)" : "var(--coral)";
+  document.getElementById("extractVerifSummaryBody").innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+        <div style="font-size:28px;font-weight:700;color:${overallColor}">${overallPct}%</div>
+        <div>
+          <div style="font-size:13px;font-weight:600">Overall confidence</div>
+          <div style="font-size:11px;color:var(--muted)">${summary.passed_checks || 0} / ${summary.total_checks || 0} checks passed</div>
+        </div>
+      </div>
+      <div class="progress-wrap" style="margin:0"><div class="progress-bar" style="width:${overallPct}%;background:${overallColor}"></div></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${Object.entries(verification).map(([cat, v]) => {
+        const color = v.status==="pass" ? "var(--teal)" : v.status==="warn" ? "var(--amber)" : "var(--coral)";
+        const icon  = v.status==="pass" ? "✓" : v.status==="warn" ? "⚠" : "✗";
+        return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:120px;text-align:center;border-top:3px solid ${color}">
+          <div style="font-size:18px;color:${color};font-weight:700">${icon}</div>
+          <div style="font-size:12px;font-weight:600;margin-top:2px">${cat}</div>
+          <div style="font-size:10px;color:var(--muted)">${Math.round((v.confidence || 0)*100)}% conf</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+
+  document.getElementById("extractVerifDetail").style.display = "block";
+  document.getElementById("extractVerifDetailBody").innerHTML =
+    Object.entries(verification).map(([cat, v]) => {
+      const color = v.status==="pass" ? "var(--teal)" : v.status==="warn" ? "var(--amber)" : "var(--coral)";
+      const checks = (v.checks || []).map(c => `
+        <div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px">
+          <span style="color:${c.pass?'var(--teal)':'var(--coral)'};font-weight:700;flex-shrink:0;width:14px">${c.pass?'✓':'✗'}</span>
+          <span style="min-width:130px;font-family:monospace;color:var(--text)">${c.feature}</span>
+          <span style="min-width:60px;font-family:monospace;color:var(--purple)">${fmt(c.value)}</span>
+          <span style="min-width:70px;color:var(--muted)">${fmt(c.expected)}</span>
+          <span style="color:var(--muted);flex:1">${fmt(c.note)}</span>
+        </div>`).join("");
+      return `
+        <div style="margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;border-left:3px solid ${color}">
+          <div style="padding:8px 14px;background:var(--surface);display:flex;align-items:center;gap:10px">
+            <span style="font-weight:700;font-size:13px;text-transform:capitalize">${cat}</span>
+            <span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}44;font-size:10px">${v.status} · ${Math.round((v.confidence || 0)*100)}%</span>
+          </div>
+          <div style="padding:0 14px">
+            <div style="display:flex;gap:10px;padding:5px 0;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600">
+              <span style="width:14px"></span>
+              <span style="min-width:130px">Feature</span>
+              <span style="min-width:60px">Value</span>
+              <span style="min-width:70px">Expected</span>
+              <span>Note</span>
+            </div>
+            ${checks}
+          </div>
+        </div>`;
+    }).join("");
+
+  document.getElementById("extractFeatureCards").style.display = "block";
+  document.getElementById("extractFeatureCardsBody").innerHTML =
+    Object.entries(features).map(([cat, vals]) => {
+      if (typeof vals !== "object" || !vals || vals.error) return "";
+
+      if (cat === 'objects') {
+        const uniqueLabels = Array.isArray(vals.unique_labels) ? vals.unique_labels : [];
+        const dominantObjects = Array.isArray(vals.dominant_objects) ? vals.dominant_objects : [];
+        const labelFrequency = Object.entries(vals.label_frequency || {});
+        const objectSummary = Object.entries(vals.object_summary || {});
+        const frames = Array.isArray(vals.frames_with_objects) ? vals.frames_with_objects.slice(0, 8) : [];
+
+        return `<div class="card" style="grid-column:1/-1">
+          <h2 style="text-transform:capitalize;margin-bottom:12px">objects & persons</h2>
+          <div class="stats" style="margin-bottom:16px">
+            <div class="stat"><div class="stat-val">${fmt(vals.sampled_frames || 0)}</div><div class="stat-lbl">Sampled frames</div></div>
+            <div class="stat"><div class="stat-val">${fmt(vals.total_detections || 0)}</div><div class="stat-lbl">Detections</div></div>
+            <div class="stat"><div class="stat-val">${fmt(uniqueLabels.length)}</div><div class="stat-lbl">Unique labels</div></div>
+            <div class="stat"><div class="stat-val">${fmt(vals.avg_detections_per_sampled_frame || 0)}</div><div class="stat-lbl">Avg / sampled frame</div></div>
+          </div>
+
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Unique labels</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${uniqueLabels.length ? uniqueLabels.map(label => `<span class="badge" style="background:var(--card);border:1px solid var(--border)">${label}</span>`).join('') : '<span style="color:var(--muted);font-size:12px">No labels detected</span>'}</div>
+
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Dominant objects</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${dominantObjects.length ? dominantObjects.map(label => `<span class="badge" style="background:rgba(127,119,221,.15);color:var(--purple);border:1px solid rgba(127,119,221,.35)">${label}</span>`).join('') : '<span style="color:var(--muted);font-size:12px">No dominant objects</span>'}</div>
+
+          <div style="overflow-x:auto;margin-bottom:14px">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="color:var(--muted);border-bottom:1px solid var(--border)"><th style="padding:7px 6px;text-align:left">Label</th><th style="padding:7px 6px;text-align:left">Detections</th></tr></thead>
+              <tbody>${labelFrequency.length ? labelFrequency.map(([label,count]) => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 6px">${label}</td><td style="padding:7px 6px;font-family:monospace">${fmt(count)}</td></tr>`).join('') : '<tr><td colspan="2" style="padding:7px 6px;color:var(--muted)">No frequency data</td></tr>'}</tbody>
+            </table>
+          </div>
+
+          <div style="overflow-x:auto;margin-bottom:14px">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="color:var(--muted);border-bottom:1px solid var(--border)"><th style="padding:7px 6px;text-align:left">Object</th><th style="padding:7px 6px;text-align:left">Detections</th><th style="padding:7px 6px;text-align:left">Frames</th><th style="padding:7px 6px;text-align:left">Avg conf</th><th style="padding:7px 6px;text-align:left">Position</th><th style="padding:7px 6px;text-align:left">Size</th><th style="padding:7px 6px;text-align:left">Depth</th></tr></thead>
+              <tbody>${objectSummary.length ? objectSummary.map(([label, info]) => `<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 6px">${label}</td><td style="padding:7px 6px">${fmt(info.detections)}</td><td style="padding:7px 6px">${fmt(info.frames_seen)}</td><td style="padding:7px 6px">${fmt(info.avg_confidence)}</td><td style="padding:7px 6px">${fmt(info.dominant_position)}</td><td style="padding:7px 6px">${fmt(info.dominant_size)}</td><td style="padding:7px 6px">${fmt(info.dominant_depth)}</td></tr>`).join('') : '<tr><td colspan="7" style="padding:7px 6px;color:var(--muted)">No object summary</td></tr>'}</tbody>
+            </table>
+          </div>
+
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Sampled frame preview</div>
+          <div style="display:flex;flex-direction:column;gap:10px">${frames.length ? frames.map(frame => `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:8px"><span>Frame <b style="color:var(--purple)">${fmt(frame.frame)}</b></span><span>${fmt(frame.timestamp_sec)} s</span><span>${fmt(frame.object_count)} detections</span></div><div style="display:flex;gap:8px;flex-wrap:wrap">${Array.isArray(frame.detections) && frame.detections.length ? frame.detections.slice(0, 8).map(det => `<span class="badge" style="background:rgba(127,119,221,.12);border:1px solid rgba(127,119,221,.28);color:var(--text)">${det.label} · ${fmt(det.confidence)} · ${fmt(det.position_in_frame)} · ${fmt(det.relative_size)} · ${fmt(det.depth_hint)}</span>`).join('') : '<span style="color:var(--muted);font-size:12px">No detection details</span>'}</div></div>`).join('') : '<span style="color:var(--muted);font-size:12px">No sampled object frames</span>'}</div>
+        </div>`;
+      }
+
+      const entries = Object.entries(vals).filter(([k, v]) => !Array.isArray(v) || v.length === 0);
+      const rows = entries.map(([k, v]) => {
+        const display = typeof v === "object" && v !== null
+          ? Object.entries(v).map(([sk,sv])=>`${sk}:${typeof sv==="number"?fmt(sv):sv}`).join(" · ")
+          : fmt(v);
+        return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px;gap:8px">
+          <span style="color:var(--muted);flex-shrink:0">${k.replace(/_/g," ")}</span>
+          <span style="font-family:monospace;text-align:right;color:var(--text);word-break:break-all">${display}</span>
+        </div>`;
+      }).join("");
+      return `<div class="card">
+        <h2 style="text-transform:capitalize;margin-bottom:12px">${cat}</h2>
+        ${rows}
+        ${vals.segments ? `<div style="font-size:11px;color:var(--muted);margin-top:8px">${vals.segments.length} temporal segments · ${(vals.per_frame||[]).length} per-frame flow values</div>` : ""}
+      </div>`;
+    }).join("");
+}
+
+function downloadExtract() {
+  if (extractResFile) window.location.href = "/download/" + extractResFile;
+}
+</script>
+
+</body>
+</html>

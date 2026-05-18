@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EffectScan Report — {{ data.basic_metadata.file }}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:      #111318;
+    --surface: #1c1f26;
+    --card:    #23272f;
+    --border:  #2e3340;
+    --text:    #e8eaf0;
+    --muted:   #7a8099;
+    --purple:  #7f77dd;
+    --teal:    #1d9e75;
+    --coral:   #e85d24;
+    --blue:    #3b8bd4;
+    --pink:    #d4537e;
+    --amber:   #ba7517;
+    --gray:    #888780;
+    --yellow:  #facc15;
+    --indigo:  #6366f1;
+  }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; }
+  a { color: var(--purple); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .report-header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 20px 40px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .report-header h1 { font-size: 18px; font-weight: 600; }
+  .report-header .meta { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .btn { padding: 8px 18px; border-radius: 8px; border: none; font-size: 13px; font-weight: 500; cursor: pointer; background: var(--purple); color: #fff; transition: opacity .2s; }
+  .btn:hover { opacity: .85; }
+  .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+
+  .tier-bar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 40px; display: flex; position: sticky; top: 0; z-index: 90;
+  }
+  .tier-tab { padding: 14px 22px; font-size: 13px; font-weight: 600; color: var(--muted); border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; transition: all .15s; }
+  .tier-tab:hover { color: var(--text); }
+  .tier-tab.active-basic    { color: var(--teal);   border-bottom-color: var(--teal); }
+  .tier-tab.active-advanced { color: var(--purple); border-bottom-color: var(--purple); }
+  .tier-tab.active-sensor   { color: var(--amber);  border-bottom-color: var(--amber); }
+
+  .tier-panel { display: none; }
+  .tier-panel.active { display: block; }
+
+  .tier-label { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 3px 10px; border-radius: 4px; margin-bottom: 20px; }
+  .tier-label-basic    { background: rgba(29,158,117,.15);  color: var(--teal); }
+  .tier-label-advanced { background: rgba(127,119,221,.15); color: var(--purple); }
+  .tier-label-sensor   { background: rgba(186,117,23,.15);  color: var(--amber); }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 40px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+  .section { margin-bottom: 40px; }
+  .section-title { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card h3 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+
+  .stat-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat-val { font-size: 24px; font-weight: 700; color: var(--text); }
+  .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .effect-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .effect-name { width: 140px; font-size: 13px; color: var(--muted); flex-shrink: 0; }
+  .effect-track { flex: 1; background: var(--border); border-radius: 99px; height: 10px; overflow: hidden; }
+  .effect-fill { height: 100%; border-radius: 99px; }
+  .effect-pct { width: 44px; font-size: 13px; text-align: right; }
+
+  .timeline-wrap { position: relative; height: 52px; background: var(--surface); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  .tl-seg { position: absolute; top: 8px; height: 36px; border-radius: 6px; opacity: .85; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; overflow: hidden; white-space: nowrap; padding: 0 4px; }
+  .tl-tick { position: absolute; bottom: 0; font-size: 9px; color: var(--muted); transform: translateX(-50%); }
+
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; background: var(--card); border: 1px solid var(--border); color: var(--text); margin: 2px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 500; }
+  .pill-green  { background: rgba(29,158,117,.2);  color: #1d9e75; }
+  .pill-blue   { background: rgba(59,139,212,.2);  color: #3b8bd4; }
+  .pill-orange { background: rgba(232,93,36,.2);   color: #e85d24; }
+  .pill-purple { background: rgba(127,119,221,.2); color: #7f77dd; }
+  .pill-amber  { background: rgba(186,117,23,.2);  color: #ba7517; }
+  .pill-gray   { background: rgba(136,135,128,.2); color: #888780; }
+
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table th { padding: 8px 10px; text-align: left; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500; }
+  .data-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--surface); }
+
+  .feature-item { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .feature-item:last-child { border-bottom: none; }
+  .feature-key { color: var(--muted); }
+  .feature-val { font-family: monospace; color: var(--text); }
+
+  .subject-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+  .subject-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .bbox-display { font-family: monospace; font-size: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; display: inline-block; }
+
+  .intensity-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 8px; }
+  .intensity-cell { border-radius: 4px; padding: 6px 4px; text-align: center; font-size: 10px; font-weight: 600; }
+
+  /* ── NEW: Per-frame explorer ── */
+  .frame-explorer-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-top: 16px; }
+  .frame-slider-row { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+  .frame-slider-row label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .frame-slider-row input[type=range] { flex: 1; min-width: 200px; accent-color: var(--purple); }
+  .frame-card { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .frame-card-hdr { background: var(--card); padding: 10px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .frame-card-hdr .fnum { font-size: 20px; font-weight: 800; color: var(--purple); font-family: monospace; }
+  .frame-card-hdr .fts  { font-size: 12px; color: var(--muted); }
+  .frame-card-body { display: grid; grid-template-columns: 1fr 1fr; }
+  .frame-section { padding: 14px 16px; border-right: 1px solid var(--border); }
+  .frame-section:last-child { border-right: none; }
+  .frame-section h4 { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+  .fdet { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; background: var(--surface); border-radius: 7px; margin-bottom: 7px; border-left: 3px solid; }
+  .fdet-top { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .fdet-label { font-weight: 700; font-size: 13px; }
+  .fdet-sub { font-size: 11px; color: var(--muted); }
+
+  /* ── NEW: Keypoint grid ── */
+  .kp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 6px; }
+  .kp-cell { font-size: 9px; padding: 3px 4px; background: var(--bg); border-radius: 3px; }
+  .kp-visible { color: var(--teal); }
+  .kp-hidden  { color: var(--muted); opacity: .5; }
+
+  /* ── NEW: Skel legend ── */
+  .skel-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .skel-legend span { display: flex; align-items: center; gap: 4px; }
+  .skel-sw { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+
+  .side-nav { position: fixed; left: 16px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; z-index: 100; }
+  .nav-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); cursor: pointer; transition: all .2s; }
+  .nav-dot:hover, .nav-dot.active { background: var(--purple); transform: scale(1.4); }
+
+  @media print { .side-nav, .tier-bar { display: none; } body { background: #fff; color: #000; } }
+</style>
+</head>
+<body>
+
+<div class="side-nav" id="sideNav">
+  <div class="nav-dot active" onclick="scrollTo('sec-top')"       title="Top"></div>
+  <div class="nav-dot"        onclick="scrollTo('sec-content-1')" title="Section 1"></div>
+  <div class="nav-dot"        onclick="scrollTo('sec-content-2')" title="Section 2"></div>
+  <div class="nav-dot"        onclick="scrollTo('sec-json')"      title="JSON"></div>
+</div>
+
+<div class="report-header" id="sec-top">
+  <div>
+    <h1>📊 Analysis Report</h1>
+    <div class="meta">
+      {{ data.basic_metadata.file }} ·
+      {{ data.basic_metadata.duration_seconds }}s ·
+      {{ data.basic_metadata.fps }} fps ·
+      {{ data.basic_metadata.total_frames }} frames
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/" class="btn btn-secondary">← Back</a>
+    <button class="btn" onclick="window.print()">🖨 Print</button>
+    <a href="/download/{{ filename }}" class="btn">⬇ Download JSON</a>
+  </div>
+</div>
+
+<div class="tier-bar">
+  <button class="tier-tab active-basic"    id="tabBtn-basic"    onclick="showTier('basic')">🟢 Basic Metadata</button>
+  <button class="tier-tab"                 id="tabBtn-advanced" onclick="showTier('advanced')">🟣 Advanced Metadata</button>
+  <button class="tier-tab"                 id="tabBtn-sensor"   onclick="showTier('sensor')">🟡 Sensor Metadata</button>
+</div>
+
+<div class="container">
+
+  <!-- ══════════════ BASIC ══════════════ -->
+  <div class="tier-panel active" id="tier-basic">
+    <div style="padding-top:8px"><span class="tier-label tier-label-basic">Basic Metadata</span></div>
+
+    <div class="section" id="sec-content-1">
+      <div class="section-title">File identity</div>
+      <div class="grid4" style="margin-bottom:24px">
+        <div class="stat-block"><div class="stat-val">{{ data.basic_metadata.duration_seconds }}s</div><div class="stat-lbl">Duration</div></div>
+        <div class="stat-block"><div class="stat-val">{{ data.basic_metadata.fps }}</div><div class="stat-lbl">Frame rate</div></div>
+        <div class="stat-block"><div class="stat-val">{{ data.basic_metadata.total_frames }}</div><div class="stat-lbl">Total frames</div></div>
+        <div class="stat-block"><div class="stat-val" style="text-transform:capitalize">{{ data.basic_metadata.motion_intensity }}</div><div class="stat-lbl">Motion intensity</div></div>
+      </div>
+      <div class="card">
+        <h3>Summary</h3>
+        <p style="font-size:14px;color:var(--muted);line-height:1.7">{{ data.basic_metadata.summary }}</p>
+        <div style="margin-top:12px">
+          <span class="badge" style="background:var(--purple);color:#fff;border:none">{{ data.basic_metadata.dominant_effect | replace('_',' ') }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-content-2">
+      <div class="section-title">Effects detected</div>
+      <div class="grid2">
+        <div class="card">
+          <h3>Confidence scores</h3>
+          {% set colors = {'speed_ramp':'#e85d24','freeze_moment':'#3b8bd4','rapid_motion':'#d4537e','rhythmic_motion':'#1d9e75','speed_variation':'#ba7517','spin_rotation':'#7f77dd','smooth_motion':'#888780'} %}
+          {% for e in data.basic_metadata.effects_detected %}
+          <div class="effect-row">
+            <div class="effect-name">{{ e.effect | replace('_',' ') }}</div>
+            <div class="effect-track"><div class="effect-fill" style="width:{{ e.confidence }}%;background:{{ colors.get(e.effect,'#7f77dd') }}"></div></div>
+            <div class="effect-pct" style="color:{{ colors.get(e.effect,'#7f77dd') }}">{{ e.confidence }}%</div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="card">
+          <h3>File details</h3>
+          {% for key, val in [('Filename', data.basic_metadata.file), ('Duration', data.basic_metadata.duration_seconds|string + 's'), ('FPS', data.basic_metadata.fps), ('Total frames', data.basic_metadata.total_frames), ('Motion intensity', data.basic_metadata.motion_intensity), ('Dominant effect', data.basic_metadata.dominant_effect | replace('_',' '))] %}
+          <div class="feature-item"><span class="feature-key">{{ key }}</span><span class="feature-val" style="font-size:12px;text-align:right;max-width:220px;word-break:break-all">{{ val }}</span></div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-json">
+      <div class="section-title">basic_metadata JSON</div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="margin:0">Raw output</h3>
+          <button class="btn btn-secondary" onclick="copyJson('jsonBasic')" style="font-size:12px;padding:6px 14px">Copy JSON</button>
+        </div>
+        <pre id="jsonBasic" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:11px;color:#a8c0d6;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all">{{ data.basic_metadata | tojson(indent=2) }}</pre>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════ ADVANCED ══════════════ -->
+  <div class="tier-panel" id="tier-advanced">
+    <div style="padding-top:8px"><span class="tier-label tier-label-advanced">Advanced Metadata</span></div>
+
+    <!-- Timeline -->
+    <div class="section" id="sec-content-1">
+      <div class="section-title">Effect timeline</div>
+      <div class="card">
+        <h3>Timeline</h3>
+        <div class="timeline-wrap" id="tlWrap"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+          {% set colors = {'speed_ramp':'#e85d24','freeze_moment':'#3b8bd4','rapid_motion':'#d4537e','rhythmic_motion':'#1d9e75','speed_variation':'#ba7517','spin_rotation':'#7f77dd','smooth_motion':'#888780'} %}
+          {% for seg in data.advanced_metadata.timeline %}
+          <span class="badge" style="background:{{ colors.get(seg.effect,'#7f77dd') }}22;color:{{ colors.get(seg.effect,'#7f77dd') }};border-color:{{ colors.get(seg.effect,'#7f77dd') }}44">
+            {{ seg.start }}s–{{ seg.end }}s {{ seg.effect | replace('_',' ') }}
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Cinematography -->
+    <div class="section" id="sec-content-2">
+      <div class="section-title">Cinematography</div>
+
+      {% if data.advanced_metadata.cinematography and data.advanced_metadata.cinematography.clip_summary %}
+      {% set cs = data.advanced_metadata.cinematography.clip_summary %}
+      <div class="grid3" style="margin-bottom:24px">
+        <div class="card">
+          <h3>Lighting</h3>
+          {% for k, v in [('Source', cs.dominant_light_source), ('Direction', cs.dominant_light_direction), ('Key style', cs.dominant_key_style), ('Avg kelvin', (cs.avg_color_temp_kelvin|string + 'K') if cs.avg_color_temp_kelvin else '—'), ('Avg luminance', cs.avg_luminance), ('Avg contrast', cs.avg_contrast)] %}
+          <div class="feature-item"><span class="feature-key">{{ k }}</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:180px">{{ v or '—' }}</span></div>
+          {% endfor %}
+          {% if cs.floor_reflection_detected %}
+          <div style="margin-top:10px"><span class="pill pill-blue">Floor reflection: {{ cs.floor_reflection_type }}</span></div>
+          {% endif %}
+        </div>
+        <div class="card">
+          <h3>Camera</h3>
+          {% for k, v in [('Angle', cs.dominant_camera_angle), ('Shot type', cs.dominant_shot_type)] %}
+          <div class="feature-item"><span class="feature-key">{{ k }}</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:180px">{{ v or '—' }}</span></div>
+          {% endfor %}
+          {% if cs.camera_movement %}
+          <div class="feature-item"><span class="feature-key">Movement</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:180px">{{ cs.camera_movement.movement }}</span></div>
+          <div class="feature-item"><span class="feature-key">Shake score</span><span class="feature-val">{{ cs.camera_movement.shake_score }}</span></div>
+          {% endif %}
+        </div>
+        {% if cs.subject_lighting_summary %}{% set sls = cs.subject_lighting_summary %}
+        <div class="card">
+          <h3>Subject lighting summary</h3>
+          {% for k, v in [('Direction', sls.dominant_light_direction_on_subjects), ('Light type', sls.dominant_light_type), ('Exposure', sls.dominant_exposure), ('Avg lit ratio', sls.avg_lit_ratio), ('Backlit frames', (sls.backlit_frames_pct|string + '%') if sls.backlit_frames_pct is not none else '—'), ('Rim light frames', (sls.rim_light_frames_pct|string + '%') if sls.rim_light_frames_pct is not none else '—'), ('Bounce light', (sls.bounce_light_pct|string + '%') if sls.bounce_light_pct is not none else '—')] %}
+          <div class="feature-item"><span class="feature-key">{{ k }}</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:180px">{{ v or '—' }}</span></div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+
+      {% if data.advanced_metadata.cinematography.segments %}
+      <div class="card" style="margin-bottom:24px">
+        <h3>Segment breakdown</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr>
+              <th>Time</th><th>Light source</th><th>Direction</th><th>Key style</th>
+              <th>Shot type</th><th>Camera</th><th>Subjects</th><th>Kelvin</th>
+            </tr></thead>
+            <tbody>
+              {% for seg in data.advanced_metadata.cinematography.segments %}
+              <tr>
+                <td style="color:var(--muted);white-space:nowrap">{{ seg.t_start }}s–{{ seg.t_end }}s</td>
+                <td>{{ seg.light_source or "—" }}</td>
+                <td>{{ seg.light_direction or "—" }}</td>
+                <td>{{ seg.key_style or "—" }}</td>
+                <td>{{ seg.shot_type or "—" }}</td>
+                <td>{{ seg.camera_movement or "—" }}</td>
+                <td>{% if seg.subject_lighting and seg.subject_lighting | length > 0 %}<span style="color:var(--purple)">{{ seg.subject_lighting | length }} subjects</span>{% else %}<span style="color:var(--muted)">—</span>{% endif %}</td>
+                <td>{{ seg.avg_kelvin or "—" }}K</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
+
+      <!-- Subject lighting detail (original + enhanced with pose) -->
+      <div class="section-title" style="margin-top:8px">Subject lighting detail</div>
+
+      {% set has_subjects = namespace(found=false) %}
+      {% if data.advanced_metadata.cinematography and data.advanced_metadata.cinematography.segments %}
+        {% for seg in data.advanced_metadata.cinematography.segments %}
+          {% if seg.subject_lighting and seg.subject_lighting | length > 0 %}{% set has_subjects.found = true %}{% endif %}
+        {% endfor %}
+      {% endif %}
+
+      {% if has_subjects.found %}
+        {% for seg in data.advanced_metadata.cinematography.segments %}
+          {% if seg.subject_lighting and seg.subject_lighting | length > 0 %}
+          <div style="margin-bottom:8px"><span style="font-size:12px;font-weight:600;color:var(--muted)">{{ seg.t_start }}s – {{ seg.t_end }}s</span></div>
+          {% for sl in seg.subject_lighting %}
+          <div class="subject-card">
+            <div class="subject-header">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span class="badge" style="background:var(--purple);color:#fff;border:none">{{ sl.label or "subject" }} #{{ sl.subject_id }}</span>
+                <span class="pill {{ 'pill-orange' if sl.backlit else 'pill-green' }}">{{ 'backlit' if sl.backlit else 'front/side lit' }}</span>
+                {% if sl.rim_light %}<span class="pill pill-blue">rim light</span>{% endif %}
+                {% if sl.bounce_light %}<span class="pill pill-amber">bounce from below</span>{% endif %}
+              </div>
+              <div class="bbox-display">bbox ({{ sl.subject_bbox.x }}, {{ sl.subject_bbox.y }}) {{ sl.subject_bbox.w }}×{{ sl.subject_bbox.h }}</div>
+            </div>
+            <div class="grid3">
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">LIGHT ON SUBJECT</div>
+                <div class="feature-item"><span class="feature-key">Direction</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:150px">{{ sl.light_direction_on_subject }}</span></div>
+                <div class="feature-item"><span class="feature-key">Shadow side</span><span class="feature-val" style="font-family:system-ui;font-size:12px">{{ sl.shadow_side }}</span></div>
+                <div class="feature-item"><span class="feature-key">Light type</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:150px">{{ sl.light_type }}</span></div>
+                <div class="feature-item">
+                  <span class="feature-key">Exposure</span>
+                  {% set exp = sl.exposure or '' %}
+                  <span class="pill {{ 'pill-orange' if 'over' in exp else 'pill-blue' if 'under' in exp else 'pill-green' }}">{{ exp }}</span>
+                </div>
+                <div class="feature-item"><span class="feature-key">Lit ratio</span><span class="feature-val">{{ sl.lit_ratio }}</span></div>
+                {% if sl.color_temp_on_subject %}
+                <div class="feature-item"><span class="feature-key">Color temp</span><span class="feature-val">{{ sl.color_temp_on_subject.kelvin }}K · {{ sl.color_temp_on_subject.label }}</span></div>
+                {% endif %}
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">COORDINATES</div>
+                {% if sl.highlight_coords %}
+                <div style="margin-bottom:8px">
+                  <div style="font-size:11px;color:var(--yellow);margin-bottom:4px">● Highlight region</div>
+                  <div class="bbox-display">({{ sl.highlight_coords.x }}, {{ sl.highlight_coords.y }}) → ({{ sl.highlight_coords.x2 }}, {{ sl.highlight_coords.y2 }})<br>w:{{ sl.highlight_coords.w }} h:{{ sl.highlight_coords.h }} · thresh:{{ sl.highlight_coords.brightness_threshold }}</div>
+                </div>
+                {% endif %}
+                {% if sl.shadow_coords %}
+                <div>
+                  <div style="font-size:11px;color:var(--indigo);margin-bottom:4px">● Shadow region</div>
+                  <div class="bbox-display">({{ sl.shadow_coords.x }}, {{ sl.shadow_coords.y }}) → ({{ sl.shadow_coords.x2 }}, {{ sl.shadow_coords.y2 }})<br>w:{{ sl.shadow_coords.w }} h:{{ sl.shadow_coords.h }} · thresh:{{ sl.shadow_coords.brightness_threshold }}</div>
+                </div>
+                {% endif %}
+              </div>
+              {% if sl.intensity_map %}
+              <div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-weight:600">3×3 INTENSITY MAP</div>
+                <div class="intensity-grid">
+                  {% for cell in sl.intensity_map.grid_3x3 %}
+                  {% set alpha = (cell.mean_brightness / 255) %}
+                  <div class="intensity-cell" style="background:rgba(250,204,21,{{ alpha }});color:{{ '#000' if cell.mean_brightness > 128 else '#fff' }}" title="{{ cell.zone }}: {{ cell.mean_brightness }}&#10;({{ cell.bbox.x }},{{ cell.bbox.y }}) {{ cell.bbox.w }}×{{ cell.bbox.h }}">{{ cell.mean_brightness | int }}</div>
+                  {% endfor %}
+                </div>
+                <div style="font-size:10px;color:var(--muted);margin-top:6px">Values 0–255 · hover for coords</div>
+                <div style="margin-top:8px;font-size:11px">
+                  <span style="color:var(--muted)">T:</span><span style="font-family:monospace">{{ sl.intensity_map.top_mean }}</span> ·
+                  <span style="color:var(--muted)">B:</span><span style="font-family:monospace">{{ sl.intensity_map.bottom_mean }}</span> ·
+                  <span style="color:var(--muted)">L:</span><span style="font-family:monospace">{{ sl.intensity_map.left_mean }}</span> ·
+                  <span style="color:var(--muted)">R:</span><span style="font-family:monospace">{{ sl.intensity_map.right_mean }}</span>
+                </div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+          {% endif %}
+        {% endfor %}
+      {% else %}
+      <div class="card"><p style="color:var(--muted);font-size:14px">No subject lighting data. Run subject tracking first, then re-analyze.</p></div>
+      {% endif %}
+
+      <!-- Subject tracking summary -->
+      {% if data.advanced_metadata.subject_tracking %}{% set st = data.advanced_metadata.subject_tracking %}
+      <div class="section-title" style="margin-top:32px">Subject tracking</div>
+      <div class="grid4" style="margin-bottom:16px">
+        <div class="stat-block"><div class="stat-val">{{ st.total_frames_analyzed or 0 }}</div><div class="stat-lbl">Frames analyzed</div></div>
+        <div class="stat-block"><div class="stat-val">{{ st.total_shots or 0 }}</div><div class="stat-lbl">Shots</div></div>
+        <div class="stat-block"><div class="stat-val">{{ st.total_detections or 0 }}</div><div class="stat-lbl">Detections</div></div>
+        <div class="stat-block"><div class="stat-val">{{ st.pose_detections or "—" }}</div><div class="stat-lbl">Pose detections</div></div>
+      </div>
+      <div class="card" style="margin-bottom:24px">
+        <h3>Label frequency</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+          {% for label, count in (st.label_frequency or {}).items() %}
+          <span class="badge">{{ label }} <span style="color:var(--purple)">{{ count }}</span></span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- ══ NEW: Per-frame deep explorer ══ -->
+      {% if data.advanced_metadata.cinematography and data.advanced_metadata.cinematography.segments %}
+      <div class="section-title" style="margin-top:8px">Per-frame deep analysis</div>
+      <div class="frame-explorer-wrap">
+        <div class="frame-slider-row">
+          <label>Cinema segment: <strong id="segNum">1</strong> of {{ data.advanced_metadata.cinematography.segments | length }}</label>
+          <input type="range" id="segSlider" min="1" max="{{ data.advanced_metadata.cinematography.segments | length }}" value="1" step="1">
+          <span style="font-size:11px;color:var(--muted)" id="segTimeLabel"></span>
+        </div>
+        <div id="segCard"></div>
+        <div class="skel-legend">
+          <span><span class="skel-sw" style="background:#ff4444"></span>Head</span>
+          <span><span class="skel-sw" style="background:#ff9900"></span>Arms</span>
+          <span><span class="skel-sw" style="background:#44ff88"></span>Torso</span>
+          <span><span class="skel-sw" style="background:#4499ff"></span>Legs</span>
+          <span style="color:var(--yellow)">● Highlight</span>
+          <span style="color:var(--indigo)">● Shadow</span>
+        </div>
+      </div>
+      <script id="cinemaSegsJson" type="application/json">{{ data.advanced_metadata.cinematography.segments | tojson }}</script>
+      {% endif %}
+    </div>
+
+    <!-- Advanced JSON -->
+    <div class="section" id="sec-json">
+      <div class="section-title">advanced_metadata JSON</div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="margin:0">Raw output</h3>
+          <button class="btn btn-secondary" onclick="copyJson('jsonAdvanced')" style="font-size:12px;padding:6px 14px">Copy JSON</button>
+        </div>
+        <pre id="jsonAdvanced" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:11px;color:#a8c0d6;max-height:500px;overflow-y:auto;white-space:pre-wrap;word-break:break-all">{{ data.advanced_metadata | tojson(indent=2) }}</pre>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════ SENSOR ══════════════ -->
+  <div class="tier-panel" id="tier-sensor">
+    <div style="padding-top:8px"><span class="tier-label tier-label-sensor">Sensor Metadata</span></div>
+
+    <div class="section" id="sec-content-1">
+      <div class="section-title">Raw optical-flow features</div>
+      <div class="grid2" style="margin-bottom:24px">
+        <div class="card">
+          <h3>Optical flow</h3>
+          {% for key in ['mean_flow','max_flow','std_flow','flow_variance','flow_gradient'] %}
+          <div class="feature-item"><span class="feature-key">{{ key | replace('_',' ') }}</span><span class="feature-val">{{ data.sensor_metadata.raw_features[key] }}</span></div>
+          {% endfor %}
+        </div>
+        <div class="card">
+          <h3>Motion signals</h3>
+          {% for key in ['freeze_ratio','accel_score','periodicity_score','rotation_score','freq_ratio','frame_diff_mean','frame_diff_std'] %}
+          <div class="feature-item"><span class="feature-key">{{ key | replace('_',' ') }}</span><span class="feature-val">{{ data.sensor_metadata.raw_features[key] }}</span></div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-content-2">
+      <div class="section-title">Per-segment optical flow</div>
+      <div class="card">
+        <h3>Sliding-window segments</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Start</th><th>End</th><th>Mean flow</th><th>Freeze</th><th>Burst</th></tr></thead>
+            <tbody>
+              {% for seg in data.sensor_metadata.per_segment_flow %}
+              <tr>
+                <td style="color:var(--muted)">{{ seg.t_start }}s</td>
+                <td style="color:var(--muted)">{{ seg.t_end }}s</td>
+                <td style="font-family:monospace">{{ seg.mean_flow }}</td>
+                <td>{% if seg.freeze %}<span class="pill pill-blue">freeze</span>{% else %}<span style="color:var(--border)">—</span>{% endif %}</td>
+                <td>{% if seg.burst %}<span class="pill pill-orange">burst</span>{% else %}<span style="color:var(--border)">—</span>{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="sec-json">
+      <div class="section-title">sensor_metadata JSON</div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="margin:0">Raw output</h3>
+          <button class="btn btn-secondary" onclick="copyJson('jsonSensor')" style="font-size:12px;padding:6px 14px">Copy JSON</button>
+        </div>
+        <pre id="jsonSensor" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:11px;color:#a8c0d6;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all">{{ data.sensor_metadata | tojson(indent=2) }}</pre>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+const EFFECT_COLORS = {
+  speed_ramp:"#e85d24", freeze_moment:"#3b8bd4", rapid_motion:"#d4537e",
+  rhythmic_motion:"#1d9e75", speed_variation:"#ba7517",
+  spin_rotation:"#7f77dd", smooth_motion:"#888780",
+};
+
+// ── Tier switching (original) ────────────────────────────────
+function showTier(name) {
+  document.querySelectorAll(".tier-panel").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tier-tab").forEach(t => {
+    t.classList.remove("active-basic","active-advanced","active-sensor");
+  });
+  document.getElementById("tier-" + name).classList.add("active");
+  document.getElementById("tabBtn-" + name).classList.add("active-" + name);
+}
+
+// ── Timeline (original) ──────────────────────────────────────
+const timelineData = {{ data.advanced_metadata.timeline | tojson }};
+const duration     = {{ data.basic_metadata.duration_seconds }};
+const wrap         = document.getElementById("tlWrap");
+if (wrap) {
+  timelineData.forEach(seg => {
+    const left  = (seg.start / duration * 100).toFixed(2);
+    const width = ((seg.end - seg.start) / duration * 100).toFixed(2);
+    const color = EFFECT_COLORS[seg.effect] || "#7f77dd";
+    const el    = document.createElement("div");
+    el.className = "tl-seg";
+    el.style.cssText = `left:${left}%;width:${width}%;background:${color}`;
+    el.title = seg.effect + " " + seg.start + "s–" + seg.end + "s";
+    el.textContent = seg.effect.replace(/_/g," ");
+    wrap.appendChild(el);
+  });
+  [0, 0.25, 0.5, 0.75, 1].forEach(pct => {
+    const tick = document.createElement("div");
+    tick.className   = "tl-tick";
+    tick.style.left  = (pct * 100) + "%";
+    tick.textContent = (pct * duration).toFixed(1) + "s";
+    wrap.appendChild(tick);
+  });
+}
+
+// ── Side nav (original) ──────────────────────────────────────
+const sections = ["sec-top","sec-content-1","sec-content-2","sec-json"];
+const dots     = document.querySelectorAll(".nav-dot");
+window.addEventListener("scroll", () => {
+  let current = 0;
+  sections.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el && el.getBoundingClientRect().top < 200) current = i;
+  });
+  dots.forEach((d, i) => d.classList.toggle("active", i === current));
+});
+function scrollTo(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior:"smooth" });
+}
+
+// ── Copy JSON (original) ─────────────────────────────────────
+function copyJson(id) {
+  navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => {
+    event.target.textContent = "Copied!";
+    setTimeout(() => event.target.textContent = "Copy JSON", 2000);
+  });
+}
+
+// ══ NEW: Per-frame cinema segment explorer ═══════════════════
+const cinemaSegsEl = document.getElementById("cinemaSegsJson");
+if (cinemaSegsEl) {
+  const segs   = JSON.parse(cinemaSegsEl.textContent || "[]");
+  const slider = document.getElementById("segSlider");
+  const numEl  = document.getElementById("segNum");
+  const timeEl = document.getElementById("segTimeLabel");
+  const cardEl = document.getElementById("segCard");
+
+  function kelvinColor(k) {
+    if (k <= 3000) return "#ff8c42";
+    if (k <= 4500) return "#ffd580";
+    if (k <= 6000) return "#ffffff";
+    if (k <= 8000) return "#c8d8ff";
+    return "#90b0ff";
+  }
+
+  function renderSeg(idx) {
+    const seg = segs[idx];
+    if (!seg) return;
+    numEl.textContent  = idx + 1;
+    timeEl.textContent = seg.t_start + "s – " + seg.t_end + "s";
+
+    const kColor = kelvinColor(seg.avg_kelvin || 5500);
+
+    let subjectHtml = "";
+    if (seg.subject_lighting && seg.subject_lighting.length) {
+      subjectHtml = `<div style="border-top:1px solid var(--border);padding:14px 16px;grid-column:1/-1">
+        <h4 style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">
+          Subject lighting — ${seg.subject_lighting.length} subject(s)
+        </h4>
+        ${seg.subject_lighting.map(sl => {
+          const im   = sl.intensity_map || {};
+          const grid = im.grid_3x3 || [];
+          const maxB = Math.max(...grid.map(c => c.mean_brightness), 1);
+          return `<div class="fdet" style="border-color:${sl.backlit ? '#e85d24' : '#7f77dd'}">
+            <div class="fdet-top">
+              <span class="fdet-label" style="color:${sl.backlit ? '#e85d24' : '#7f77dd'}">${sl.label} #${sl.subject_id}</span>
+              <span class="pill pill-purple">${sl.light_direction_on_subject}</span>
+              <span class="pill pill-amber">${sl.light_type}</span>
+              <span class="pill ${sl.exposure && sl.exposure.includes('over') ? 'pill-orange' : sl.exposure && sl.exposure.includes('under') ? 'pill-blue' : 'pill-green'}">${sl.exposure}</span>
+              ${sl.backlit ? '<span class="pill pill-orange">backlit</span>' : ''}
+              ${sl.rim_light ? '<span class="pill pill-blue">rim</span>' : ''}
+              ${sl.bounce_light ? '<span class="pill pill-green">bounce</span>' : ''}
+            </div>
+            <div class="fdet-sub">
+              Shadow: ${sl.shadow_side} · Falloff: ${sl.color_temp_on_subject ? sl.color_temp_on_subject.label : ''} · Lit ${((sl.lit_ratio||0)*100).toFixed(0)}%
+              · bbox (${sl.subject_bbox ? sl.subject_bbox.x : '?'}, ${sl.subject_bbox ? sl.subject_bbox.y : '?'}) ${sl.subject_bbox ? sl.subject_bbox.w : '?'}×${sl.subject_bbox ? sl.subject_bbox.h : '?'}
+            </div>
+            ${grid.length ? `
+            <div style="margin-top:8px">
+              <div style="font-size:9px;color:var(--muted);margin-bottom:3px">3×3 INTENSITY MAP</div>
+              <div class="intensity-grid" style="max-width:180px">
+                ${grid.map(cell => {
+                  const pct = cell.mean_brightness / maxB;
+                  return `<div class="intensity-cell"
+                    style="background:rgba(250,204,21,${(pct*0.7+0.1).toFixed(2)});color:${pct > 0.55 ? '#000' : '#fff'}"
+                    title="${cell.zone}: ${cell.mean_brightness}">
+                    ${Math.round(cell.mean_brightness)}
+                  </div>`;
+                }).join('')}
+              </div>
+              <div style="font-size:10px;color:var(--muted);margin-top:4px">
+                T:${im.top_mean} B:${im.bottom_mean} L:${im.left_mean} R:${im.right_mean} C:${im.center_mean}
+              </div>
+            </div>` : ""}
+          </div>`;
+        }).join("")}
+      </div>`;
+    }
+
+    cardEl.innerHTML = `
+      <div class="frame-card">
+        <div class="frame-card-hdr">
+          <span class="fnum">Seg ${idx+1}</span>
+          <span class="fts">${seg.t_start}s – ${seg.t_end}s</span>
+          <div style="margin-left:auto;display:flex;gap:5px;flex-wrap:wrap">
+            <span class="pill pill-purple">${seg.light_source||""}</span>
+            <span class="pill pill-amber">${seg.key_style||""}</span>
+            <span class="pill pill-green">${seg.shot_type||""}</span>
+            <span class="pill pill-blue">${seg.camera_movement||""}</span>
+          </div>
+        </div>
+        <div class="frame-card-body">
+          <div class="frame-section">
+            <h4>🔆 Lighting</h4>
+            <div class="feature-item"><span class="feature-key">Source</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:160px">${seg.light_source||"—"}</span></div>
+            <div class="feature-item"><span class="feature-key">Direction</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:160px">${seg.light_direction||"—"}</span></div>
+            <div class="feature-item">
+              <span class="feature-key">Color temp</span>
+              <span class="feature-val" style="display:flex;align-items:center;gap:6px;font-family:system-ui;font-size:12px">
+                <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${kColor};border:1px solid #444"></span>
+                ${seg.avg_kelvin ? Math.round(seg.avg_kelvin) + "K" : "—"}
+              </span>
+            </div>
+            <div class="feature-item"><span class="feature-key">Luminance</span><span class="feature-val">${seg.avg_luminance||"—"}</span></div>
+            ${seg.reflection ? '<div class="feature-item"><span class="feature-key">Reflection</span><span class="feature-val"><span class="pill pill-amber">detected</span></span></div>' : ''}
+          </div>
+          <div class="frame-section">
+            <h4>🎥 Camera</h4>
+            <div class="feature-item"><span class="feature-key">Angle</span><span class="feature-val" style="font-family:system-ui;font-size:12px;text-align:right;max-width:160px">${seg.camera_angle||"—"}</span></div>
+            <div class="feature-item"><span class="feature-key">Shot type</span><span class="feature-val" style="font-family:system-ui;font-size:12px">${seg.shot_type||"—"}</span></div>
+            <div class="feature-item"><span class="feature-key">Movement</span><span class="feature-val" style="font-family:system-ui;font-size:12px">${seg.camera_movement||"—"}</span></div>
+            <div class="feature-item"><span class="feature-key">Key style</span><span class="feature-val" style="font-family:system-ui;font-size:12px">${seg.key_style||"—"}</span></div>
+          </div>
+          ${subjectHtml}
+        </div>
+      </div>`;
+  }
+
+  if (segs.length) {
+    renderSeg(0);
+    slider.addEventListener("input", () => renderSeg(parseInt(slider.value) - 1));
+  }
+}
+</script>
+</body>
+</html>
