@@ -180,6 +180,4 @@ Install `opencv-contrib-python` if a tracker backend is missing.
 
 Verify the `.pt` files exist and that Ultralytics and PyTorch are installed correctly.
 
-## License
 
-Add your preferred license here before publishing on GitHub.
