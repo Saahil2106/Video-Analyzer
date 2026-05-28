@@ -457,6 +457,24 @@
       <h2 style="margin-top:8px">Labels found</h2>
       <div id="trackLabels" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
     </div>
+    <div class="card" style="margin-top:24px">
+      <h2>Tracking utilities</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
+        Lightweight controls for safe backend status routes already present in the app.
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn btn-secondary" onclick="checkMctStatus()">Check MCT status</button>
+        <button class="btn btn-secondary" onclick="resetMct()">Reset MCT</button>
+        <button class="btn btn-secondary" onclick="checkReidStatus()">Check Re-ID status</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="trackUtilMsg">
+        No utility requests run yet.
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">MCT response</div>
+      <div class="json-box" id="mctStatusBox" style="max-height:180px;margin-bottom:14px">No MCT response yet.</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Re-ID response</div>
+      <div class="json-box" id="reidStatusBox" style="max-height:180px">No Re-ID response yet.</div>
+    </div>
   </div>
   <br>
   <div class="card" id="shotsCard" style="display:none">
@@ -1134,6 +1152,55 @@ async function runTracking() {
       renderTrackingResults(data.result);
     }
   }, 1000);
+}
+
+function formatUtilityPayload(data) {
+  return JSON.stringify(data, null, 2);
+}
+
+async function checkMctStatus() {
+  const msg = document.getElementById("trackUtilMsg");
+  const box = document.getElementById("mctStatusBox");
+  msg.textContent = "Checking MCT status...";
+  try {
+    const res = await fetch("/mct/status");
+    const data = await res.json();
+    box.textContent = formatUtilityPayload(data);
+    msg.textContent = "MCT status loaded.";
+  } catch (err) {
+    box.textContent = "Request failed: " + err.message;
+    msg.textContent = "MCT status request failed.";
+  }
+}
+
+async function resetMct() {
+  const msg = document.getElementById("trackUtilMsg");
+  const box = document.getElementById("mctStatusBox");
+  msg.textContent = "Resetting MCT...";
+  try {
+    const res = await fetch("/mct/reset", { method:"POST" });
+    const data = await res.json();
+    box.textContent = formatUtilityPayload(data);
+    msg.textContent = "MCT reset complete.";
+  } catch (err) {
+    box.textContent = "Request failed: " + err.message;
+    msg.textContent = "MCT reset request failed.";
+  }
+}
+
+async function checkReidStatus() {
+  const msg = document.getElementById("trackUtilMsg");
+  const box = document.getElementById("reidStatusBox");
+  msg.textContent = "Checking Re-ID status...";
+  try {
+    const res = await fetch("/reid/status");
+    const data = await res.json();
+    box.textContent = formatUtilityPayload(data);
+    msg.textContent = "Re-ID status loaded.";
+  } catch (err) {
+    box.textContent = "Request failed: " + err.message;
+    msg.textContent = "Re-ID status request failed.";
+  }
 }
 
 function renderTrackingResults(data) {
