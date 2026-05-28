@@ -1,0 +1,40 @@
+# Python cache files
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local uploads and generated app output
+uploads/
+outputs/
+reports/
+generated/
+*.json
+*_features.json
+
+# Model weights and large ML artifacts
+*.pt
+*.pth
+*.onnx
+*.engine
+*.weights
+
+# Local environment/config files
+.env
+.env.*
+!.env.example
+
+# IDE/editor files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,10 @@
+flask
+werkzeug
+numpy
+scipy
+pandas
+opencv-python
+opencv-contrib-python
+ultralytics
+torch
+torchvision
