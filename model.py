@@ -1,9 +1,22 @@
 import json
+import os
 import numpy as np
 from pathlib import Path
 from collections import defaultdict
 
-METADATA_PATH = "D:/Coding/Videos/datasets/processed/clip_metadata_v2.json"
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_METADATA_PATH = PROJECT_ROOT / "datasets" / "processed" / "clip_metadata_v2.json"
+METADATA_PATH = Path(
+    os.environ.get("VIDEO_ANALYZER_METADATA_PATH", str(DEFAULT_METADATA_PATH))
+).expanduser()
+
+def get_metadata_status():
+    return {
+        "metadata_path": str(METADATA_PATH.resolve(strict=False)),
+        "exists": METADATA_PATH.exists(),
+        "using_env_override": "VIDEO_ANALYZER_METADATA_PATH" in os.environ,
+    }
+
 EFFECTS = [
     "speed_ramp", "freeze_moment", "rapid_motion",
     "rhythmic_motion", "speed_variation", "spin_rotation", "smooth_motion"
@@ -22,7 +35,18 @@ class EffectClassifier:
         self.trained = False
 
     def load_data(self):
-        with open(METADATA_PATH) as f:
+        if not METADATA_PATH.exists():
+            attempted_path = METADATA_PATH.resolve(strict=False)
+            raise FileNotFoundError(
+                "Training metadata file not found.\n"
+                f"Attempted path: {attempted_path}\n"
+                "Set VIDEO_ANALYZER_METADATA_PATH to override the default path.\n"
+                "PowerShell: "
+                "$env:VIDEO_ANALYZER_METADATA_PATH='C:/path/to/clip_metadata_v2.json'\n"
+                "Git Bash: "
+                "export VIDEO_ANALYZER_METADATA_PATH='/c/path/to/clip_metadata_v2.json'"
+            )
+        with METADATA_PATH.open("r", encoding="utf-8") as f:
             data = json.load(f)
         grouped = defaultdict(list)
         for clip in data:

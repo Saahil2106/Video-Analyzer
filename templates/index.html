@@ -284,9 +284,14 @@
         <div class="dot dot-gray" id="trainDot"></div>
         <span id="trainStatusText">Not trained</span>
       </div>
-      <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Trains a statistical effect classifier on 3,160 UCF-101 clips.</p>
+      <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Trains a statistical effect classifier on action recognition video data.</p>
       <div class="progress-wrap"><div class="progress-bar" id="trainProgress"></div></div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="trainPct">0%</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);margin-bottom:16px">
+        <div style="margin-bottom:6px">Metadata file: <span id="metadataPathText" style="color:var(--text);font-family:monospace;word-break:break-all">Loading...</span></div>
+        <div style="margin-bottom:4px">Status: <span id="metadataExistsText" style="color:var(--text)">Loading...</span></div>
+        <div>Env override: <span id="metadataEnvText" style="color:var(--text)">Loading...</span></div>
+      </div>
       <button class="btn btn-primary" id="trainBtn" onclick="trainModel()">Train model</button>
     </div>
     <div class="card" id="metricsCard" style="display:none">
@@ -798,6 +803,22 @@ function runTrackingFromUpload() {
 // ═══════════════════════════════════════════════════════════════
 // TRAIN
 // ═══════════════════════════════════════════════════════════════
+async function loadMetadataStatus() {
+  try {
+    const res = await fetch("/metadata/status");
+    const data = await res.json();
+    document.getElementById("metadataPathText").textContent = data.metadata_path || "Unknown";
+    document.getElementById("metadataExistsText").textContent = data.exists ? "Found" : "Missing";
+    document.getElementById("metadataExistsText").style.color = data.exists ? "var(--teal)" : "var(--coral)";
+    document.getElementById("metadataEnvText").textContent = data.using_env_override ? "Yes" : "No";
+  } catch (err) {
+    document.getElementById("metadataPathText").textContent = "Unable to load";
+    document.getElementById("metadataExistsText").textContent = "Missing";
+    document.getElementById("metadataExistsText").style.color = "var(--coral)";
+    document.getElementById("metadataEnvText").textContent = "Unknown";
+  }
+}
+
 async function trainModel() {
   document.getElementById("trainBtn").disabled = true;
   document.getElementById("trainDot").className = "dot dot-yellow";
@@ -821,6 +842,12 @@ async function trainModel() {
         const color = EFFECT_COLORS[effect] || "#7f77dd";
         f1El.innerHTML += `<div class="effect-row"><div class="effect-name">${effect.replace(/_/g," ")}</div><div class="effect-track"><div class="effect-fill" style="width:${score*100}%;background:${color}"></div></div><div class="effect-pct">${score}</div></div>`;
       });
+    }
+    if (data.status === "error") {
+      clearInterval(iv);
+      document.getElementById("trainDot").className = "dot dot-gray";
+      document.getElementById("trainStatusText").textContent = data.error || "Training failed";
+      document.getElementById("trainBtn").disabled = false;
     }
   }, 500);
 }
@@ -1369,6 +1396,7 @@ function getTrackingParams() {
 
 // Init grid on DOM ready
 document.addEventListener("DOMContentLoaded", buildTargetGrid);
+document.addEventListener("DOMContentLoaded", loadMetadataStatus);
 
 function downloadTracking() { if (trackResFile) window.location.href = "/download/" + trackResFile; }
 </script>

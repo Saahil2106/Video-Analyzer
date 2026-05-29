@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_file, Response
 from werkzeug.utils import secure_filename
 import os, json, threading, subprocess, shutil, cv2, numpy as np
 from pathlib import Path
-from model              import clf, EFFECTS
+from model              import clf, EFFECTS, get_metadata_status
 from analyzer           import extract_features, build_metadata
 from subject_tracker    import track_subjects
 from cinema_analyzer    import analyze_video_cinema
@@ -27,7 +27,7 @@ FFMPEG  = shutil.which("ffmpeg")
 
 
 # ── Global state ───────────────────────────────────────────────
-train_state   = {"status": "idle",    "progress": 0, "result": None}
+train_state   = {"status": "idle",    "progress": 0, "result": None, "error": None}
 track_state   = {"status": "idle",    "progress": 0,
                  "result": None, "result_file": None}
 extract_state = {"status": "idle",    "progress": 0,
@@ -482,16 +482,47 @@ def index():
 @app.route("/train", methods=["POST"])
 def train():
     def run():
-        train_state["status"]   = "training"
-        train_state["progress"] = 0
-        result = clf.train(progress_cb=lambda p: train_state.update({"progress": p}))
-        train_state.update({"status": "done", "progress": 100, "result": to_json_safe(result)})
+        train_state.update({
+            "status": "training",
+            "progress": 0,
+            "result": None,
+            "error": None,
+        })
+        try:
+            result = clf.train(progress_cb=lambda p: train_state.update({"progress": p}))
+            train_state.update({
+                "status": "done",
+                "progress": 100,
+                "result": to_json_safe(result),
+                "error": None,
+            })
+        except FileNotFoundError as e:
+            train_state.update({
+                "status": "error",
+                "result": None,
+                "error": (
+                    "Training metadata file not found. Place clip_metadata_v2.json "
+                    "in the shown metadata path or set VIDEO_ANALYZER_METADATA_PATH."
+                ),
+            })
+            import traceback; traceback.print_exc()
+        except Exception as e:
+            train_state.update({
+                "status": "error",
+                "result": None,
+                "error": f"Training failed: {e}",
+            })
+            import traceback; traceback.print_exc()
     threading.Thread(target=run, daemon=True).start()
     return jsonify({"started": True})
 
 @app.route("/train/status")
 def train_status():
     return jsonify(to_json_safe(train_state))
+
+@app.route("/metadata/status")
+def metadata_status():
+    return jsonify(get_metadata_status())
 
 
 # ══════════════════════════════════════════════════════════════
