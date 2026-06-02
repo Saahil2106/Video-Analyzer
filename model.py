@@ -5,14 +5,33 @@ from pathlib import Path
 from collections import defaultdict
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_METADATA_PATH = PROJECT_ROOT / "datasets" / "processed" / "clip_metadata_v2.json"
-METADATA_PATH = Path(
-    os.environ.get("VIDEO_ANALYZER_METADATA_PATH", str(DEFAULT_METADATA_PATH))
-).expanduser()
+METADATA_RELATIVE_PATH = Path("datasets") / "processed" / "clip_metadata_v2.json"
+
+
+def _resolve_metadata_path() -> Path:
+    override = os.environ.get("VIDEO_ANALYZER_METADATA_PATH")
+    candidate = Path(override).expanduser() if override else METADATA_RELATIVE_PATH
+    if not candidate.is_absolute():
+        candidate = PROJECT_ROOT / candidate
+    return candidate
+
+
+METADATA_PATH = _resolve_metadata_path()
+
+
+def get_metadata_missing_message() -> str:
+    attempted_path = METADATA_PATH.resolve(strict=False)
+    return (
+        "Training metadata file not found.\n"
+        f"Place the file at: {METADATA_RELATIVE_PATH.as_posix()}\n"
+        f"Resolved path: {attempted_path}\n"
+        "You can also set VIDEO_ANALYZER_METADATA_PATH to override the default path."
+    )
 
 def get_metadata_status():
     return {
         "metadata_path": str(METADATA_PATH.resolve(strict=False)),
+        "expected_relative_path": METADATA_RELATIVE_PATH.as_posix(),
         "exists": METADATA_PATH.exists(),
         "using_env_override": "VIDEO_ANALYZER_METADATA_PATH" in os.environ,
     }
@@ -36,16 +55,7 @@ class EffectClassifier:
 
     def load_data(self):
         if not METADATA_PATH.exists():
-            attempted_path = METADATA_PATH.resolve(strict=False)
-            raise FileNotFoundError(
-                "Training metadata file not found.\n"
-                f"Attempted path: {attempted_path}\n"
-                "Set VIDEO_ANALYZER_METADATA_PATH to override the default path.\n"
-                "PowerShell: "
-                "$env:VIDEO_ANALYZER_METADATA_PATH='C:/path/to/clip_metadata_v2.json'\n"
-                "Git Bash: "
-                "export VIDEO_ANALYZER_METADATA_PATH='/c/path/to/clip_metadata_v2.json'"
-            )
+            raise FileNotFoundError(get_metadata_missing_message())
         with METADATA_PATH.open("r", encoding="utf-8") as f:
             data = json.load(f)
         grouped = defaultdict(list)

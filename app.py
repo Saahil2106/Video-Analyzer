@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_file, Response
 from werkzeug.utils import secure_filename
 import os, json, threading, subprocess, shutil, cv2, numpy as np
 from pathlib import Path
-from model              import clf, EFFECTS, get_metadata_status
+from model              import clf, EFFECTS, get_metadata_status, get_metadata_missing_message
 from analyzer           import extract_features, build_metadata
 from subject_tracker    import track_subjects
 from cinema_analyzer    import analyze_video_cinema
@@ -496,14 +496,11 @@ def train():
                 "result": to_json_safe(result),
                 "error": None,
             })
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             train_state.update({
                 "status": "error",
                 "result": None,
-                "error": (
-                    "Training metadata file not found. Place clip_metadata_v2.json "
-                    "in the shown metadata path or set VIDEO_ANALYZER_METADATA_PATH."
-                ),
+                "error": get_metadata_missing_message(),
             })
             import traceback; traceback.print_exc()
         except Exception as e:
