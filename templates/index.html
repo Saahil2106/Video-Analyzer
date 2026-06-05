@@ -225,6 +225,7 @@
         </p>
         <div class="progress-wrap"><div class="progress-bar" id="trackInlineProgress"></div></div>
         <div style="font-size:12px;color:var(--muted);margin-top:4px" id="trackInlineStatus">Starting...</div>
+        <div id="trackInlineSummary" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);margin-top:12px"></div>
       </div>
     </div>
   </div>
@@ -469,8 +470,11 @@
       </p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
         <button class="btn btn-secondary" onclick="checkMctStatus()">Check MCT status</button>
-        <button class="btn btn-secondary" onclick="resetMct()">Reset MCT</button>
+        <button class="btn btn-secondary" onclick="resetMct()">Reset MCT Session</button>
         <button class="btn btn-secondary" onclick="checkReidStatus()">Check Re-ID status</button>
+      </div>
+      <div id="mctSessionSummary" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);margin-bottom:12px">
+        Loading MCT session status...
       </div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="trackUtilMsg">
         No utility requests run yet.
@@ -759,6 +763,8 @@ function runTrackingFromUpload() {
   document.getElementById("runTrackBtn").disabled = true;
   document.getElementById("mergeBanner").style.display = "none";
   document.getElementById("trackInlineStatus").textContent = "Starting YOLO11 detection…";
+  document.getElementById("trackInlineSummary").style.display = "none";
+  document.getElementById("trackInlineSummary").textContent = "";
   const params = getTrackingParams();
   const fd = new FormData();
   fd.append("video",        selectedFile);
@@ -780,6 +786,8 @@ function runTrackingFromUpload() {
       clearInterval(iv);
       document.getElementById("runTrackBtn").disabled = false;
       if (data.result) ingestTrackingData(data.result);
+      renderInlineTrackingSummary(data);
+      loadMctSessionSummary().catch(() => {});
       if (data.merged_metadata) {
         lastResult = data.merged_metadata;
         playerData = data.merged_metadata;
@@ -798,6 +806,42 @@ function runTrackingFromUpload() {
       clearInterval(iv);
       document.getElementById("runTrackBtn").disabled = false;    }
   }, 1000);
+}
+
+function renderInlineTrackingSummary(trackStatus) {
+  const summaryEl = document.getElementById("trackInlineSummary");
+  if (!summaryEl) return;
+
+  const result = trackStatus?.result || {};
+  const activeTracks = trackStatus?.active_tracks || result.active_tracks || [];
+  const mctSummary = trackStatus?.mct_summary || result.mct_summary || null;
+  const mergedMetadata = trackStatus?.merged_metadata || {};
+  const videoFile =
+    mergedMetadata?.basic_metadata?.file ||
+    selectedFile?.name ||
+    (trackStatus?.result_file ? trackStatus.result_file.replace(/_tracking\.json$/, "") : null);
+  const crossCameraMatches = Array.isArray(result.cross_camera_matches)
+    ? result.cross_camera_matches.length
+    : (mctSummary?.cross_camera_matches ?? null);
+
+  const parts = [
+    videoFile ? `Tracking completed for ${videoFile}` : "Tracking completed"
+  ];
+  if (Array.isArray(activeTracks)) parts.push(`${activeTracks.length} active/local tracks`);
+
+  if (mctSummary) {
+    const cameraCount = Array.isArray(mctSummary.cameras) ? mctSummary.cameras.length : 0;
+    const globalIds = mctSummary.total_global_ids ?? 0;
+    const crossMatches = crossCameraMatches ?? 0;
+    parts.push(`${globalIds} global IDs`);
+    parts.push(`${cameraCount} cameras in session`);
+    parts.push(`${crossMatches} cross-camera matches`);
+  } else {
+    parts.push("No MCT identity summary was returned for this run.");
+  }
+
+  summaryEl.textContent = parts.join(" - ");
+  summaryEl.style.display = "block";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1168,6 +1212,7 @@ async function runTracking() {
       document.getElementById("trackBtn").disabled = false;
       trackResFile = data.result_file;
       if (data.result) ingestTrackingData(data.result);
+      loadMctSessionSummary().catch(() => {});
       if (data.merged_metadata) {
         lastResult = data.merged_metadata; playerData = data.merged_metadata;
         renderCinema(data.merged_metadata);
@@ -1190,8 +1235,7 @@ async function checkMctStatus() {
   const box = document.getElementById("mctStatusBox");
   msg.textContent = "Checking MCT status...";
   try {
-    const res = await fetch("/mct/status");
-    const data = await res.json();
+    const data = await loadMctSessionSummary();
     box.textContent = formatUtilityPayload(data);
     msg.textContent = "MCT status loaded.";
   } catch (err) {
@@ -1209,10 +1253,29 @@ async function resetMct() {
     const data = await res.json();
     box.textContent = formatUtilityPayload(data);
     msg.textContent = "MCT reset complete.";
+    await loadMctSessionSummary();
   } catch (err) {
     box.textContent = "Request failed: " + err.message;
     msg.textContent = "MCT reset request failed.";
   }
+}
+
+async function loadMctSessionSummary() {
+  const summaryEl = document.getElementById("mctSessionSummary");
+  const res = await fetch("/mct/status");
+  const data = await res.json();
+
+  if (data.status === "active") {
+    const summary = data.summary || {};
+    const cameras = Array.isArray(summary.cameras) ? summary.cameras.length : 0;
+    const globalIds = summary.total_global_ids || 0;
+    const crossMatches = summary.cross_camera_matches || 0;
+    summaryEl.textContent = `MCT session: ${cameras} cameras, ${globalIds} global IDs, ${crossMatches} cross-camera matches`;
+  } else {
+    summaryEl.textContent = "No MCT session yet";
+  }
+
+  return data;
 }
 
 async function checkReidStatus() {
@@ -1397,6 +1460,12 @@ function getTrackingParams() {
 // Init grid on DOM ready
 document.addEventListener("DOMContentLoaded", buildTargetGrid);
 document.addEventListener("DOMContentLoaded", loadMetadataStatus);
+document.addEventListener("DOMContentLoaded", () => {
+  loadMctSessionSummary().catch(() => {
+    const summaryEl = document.getElementById("mctSessionSummary");
+    if (summaryEl) summaryEl.textContent = "Unable to load MCT session status";
+  });
+});
 
 function downloadTracking() { if (trackResFile) window.location.href = "/download/" + trackResFile; }
 </script>
